@@ -268,31 +268,38 @@ def _get_uc_signal(image,pimage,roi_info):
 
 ####################################################################
 
-class UnitCellImage():
+class UnitCellImage(hs.signals.Signal2D):
 
-    def __init__(self,image,uc_centers_matrix,uc_data=None,boundx=100,boundy=100):
+    def __init__(self,image=None,uc_centers_matrix=None,data=None,boundx=100,boundy=100,*args,**kwargs):
         
-
-        self.uc_centers_matrix = uc_centers_matrix.astype("int")
-        self.original_image = image
-        self.original_signal = hs.signals.Signal2D(image)
+        if not uc_centers_matrix is None:
+            self.uc_centers_matrix = uc_centers_matrix.astype("int")
+            self._nav_shape=uc_centers_matrix.shape[:2]
+        if not image is None:
+            self.original_scale = image.axes_manager[0].scale
+            self.original_image = image.data
+        
         self.bounds = (boundx,boundy)
         self.pos_data = None
         self.markers = None
-        self._nav_shape=uc_centers_matrix.shape[:2]
-        if uc_data is None:
+
+        self._save = ['uc_centers_matrix',
+      'original_image', 'bounds','original_scale','_sigmas',
+      'pos_data', 'xy', '_fix_sigmas', 'gaus_model_params',"_save"]
+        if data is None:
             self.uc_roi = self.define_uc_roi()
         else:
-            self.uci = hs.signals.Signal2D(uc_data)
+            super().__init__(data,*args,**kwargs)#self.uci = hs.signals.Signal2D(uc_data)
 
 
     def build(self,*args,**kwargs):
-        self.uci=hs.signals.Signal2D(self._get_uc_signal(),*args,**kwargs)
+        #self.uci=hs.signals.Signal2D(self._get_uc_signal(),*args,**kwargs)
+        super().__init__(self._get_uc_signal(),*args,**kwargs)
 
     def define_uc_roi(self):
         x,y=self.uc_centers_matrix[0,0]
         bx,by=self.bounds
-        vsignal=hs.signals.Signal2D(self.original_signal.isig[x-bx:x+bx,y-by:y+by].data)
+        vsignal=hs.signals.Signal2D(self.original_image[y-by:y+by,x-bx:x+bx])
         vsignal.plot()
         self.roi = hs.roi.RectangularROI(left=bx//2, right=3*bx//2, top=by//2, bottom=3*by//2)
         im_roi = self.roi.interactive(vsignal, color="red")
@@ -302,14 +309,14 @@ class UnitCellImage():
 
         self.pos_data = None
 
-        self.pos_data_gui=am.add_atoms_with_gui(self.uci.inav[0,0])
+        self.pos_data_gui=am.add_atoms_with_gui(self.inav[0,0])
 
 
         # put them in eahc unit cell and set pos_data atribute
 
     def check_pos_data(self):
         if self.pos_data is None:
-            self.pos_data=np.zeros(list(self.uci.data.shape[:2])+
+            self.pos_data=np.zeros(list(self.data.shape[:2])+
                 list(np.array(self.pos_data_gui).shape))
 
             self.pos_data[:,:]=np.array(self.pos_data_gui)[np.newaxis,np.newaxis,:,:]
@@ -319,35 +326,38 @@ class UnitCellImage():
 
     def refine_uc_atoms_com(self,iters=5,**args):
         self.check_pos_data()
-        for r in range(self.uci.data.shape[0]):
-            for c in range(self.uci.data.shape[1]):
+        for r in range(self.data.shape[0]):
+            for c in range(self.data.shape[1]):
                 _pos=self.pos_data.copy()
                 self.pos_data[r,c,:,:]=refine_image_positions_com(self.pos_data[r,c],
-                    self.uci.data[r,c],iters,**args)
+                    self.data[r,c],iters,**args)
         self.uc_add_markers()
 
 
     def refine_uc_atoms_2dgauss(self,sigmas=0.1,fix_sigmas=False):
 
 
-        xx,yy= np.meshgrid(*[range(i) for i in self.uci.data.shape[-2:]][::-1])
+        xx,yy= np.meshgrid(*[range(i) for i in self.data.shape[-2:]][::-1])
         xy=(xx.ravel(),yy.ravel())
         self.xy=xy
         self._fix_sigmas=fix_sigmas
         if fix_sigmas:
-            self.model = UC_Model_fix_sigma(self.uci.data.shape[-2:],self.pos_data.shape[-2],sigmas).model
-            self.gaus_model_params = np.zeros((self.uci.data.shape[0],
-            self.uci.data.shape[1],self.pos_data.shape[-2],3))
+            if isinstance(sigmas,np.ndarray) is False:
+                sigmas=np.array(sigmas)
+            self._sigmas = sigmas
+            self.model = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2],sigmas).model
+            self.gaus_model_params = np.zeros((self.data.shape[0],
+            self.data.shape[1],self.pos_data.shape[-2],3))
 
         else:
-            self.model = UC_Model(self.uci.data.shape[-2:],self.pos_data.shape[-2]).model
-            self.gaus_model_params = np.zeros((self.uci.data.shape[0],
-            self.uci.data.shape[1],self.pos_data.shape[-2],4))
+            self.model = UC_Model(self.data.shape[-2:],self.pos_data.shape[-2]).model
+            self.gaus_model_params = np.zeros((self.data.shape[0],
+            self.data.shape[1],self.pos_data.shape[-2],4))
 
-        for r in range(self.uci.data.shape[0]):
-            for c in range(self.uci.data.shape[1]):
+        for r in range(self.data.shape[0]):
+            for c in range(self.data.shape[1]):
 
-                im = norm(self.uci.data[r,c])
+                im = norm(self.data[r,c])
 
                 if fix_sigmas:
                     params = np.ones((self.pos_data.shape[-2],3))
@@ -360,8 +370,8 @@ class UnitCellImage():
 
                 params[:,0] = im[*self.pos_data[r,c].astype("int").T]
                 params[:,1:3] = self.pos_data[r,c]
-                params[:,1]/= self.uci.data.shape[-1]
-                params[:,2]/= self.uci.data.shape[-2]
+                params[:,1]/= self.data.shape[-1]
+                params[:,2]/= self.data.shape[-2]
                 try:
                     res, _ = spo.curve_fit(self.model,
                         self.xy,
@@ -371,7 +381,7 @@ class UnitCellImage():
                         xtol = 0.001,
                         ftol =1e-3)
                     if c==0:
-                        print(r"{}/{}".format(r,self.uci.data.shape[0]))
+                        print(r"{}/{}".format(r,self.data.shape[0]))
                 except RuntimeError:
                     return r,c
 
@@ -380,15 +390,19 @@ class UnitCellImage():
                 self.gaus_model_params[r,c]=res
 
 
-                self.pos_data[r,c,:,0] = res[:,1]*self.uci.data.shape[-1]
-                self.pos_data[r,c,:,1] = res[:,2]*self.uci.data.shape[-2]
+                self.pos_data[r,c,:,0] = res[:,1]*self.data.shape[-1]
+                self.pos_data[r,c,:,1] = res[:,2]*self.data.shape[-2]
         self.uc_add_markers()
 
     def build_2dgaus_model(self):
-        mod = np.zeros(self.uci.data.shape)
-        for r in range(self.uci.data.shape[0]):
-            for c in range(self.uci.data.shape[1]):
-                mod[r,c,...]=self.model(self.xy,self.gaus_model_params[r,c,...].ravel()).reshape(self.uci.data.shape[-2:])
+        mod = np.zeros(self.data.shape)
+        for r in range(self.data.shape[0]):
+            for c in range(self.data.shape[1]):
+                mod[r,c,...]=self.model(self.xy,self.gaus_model_params[r,c,...].ravel()).reshape(self.data.shape[-2:])
+
+        mod = hs.signals.Signal2D(mod)
+
+        plot_compare(self,mod)
 
         return mod
 
@@ -396,10 +410,10 @@ class UnitCellImage():
 
 
     def uc_add_markers(self):
-        if "Markers" in [i[0] for i in list(self.uci.metadata)]:
-            del self.uci.metadata.Markers
+        if "Markers" in [i[0] for i in list(self.metadata)]:
+            del self.metadata.Markers
         self.markers=[hs.markers.point(self.pos_data[:,:,p,0],self.pos_data[:,:,p,1],color="red") for p in range(self.pos_data.shape[2])]
-        self.uci.add_marker(self.markers,permanent=True,plot_marker=False)
+        self.add_marker(self.markers,permanent=True,plot_marker=False)
 
     def _get_uc_signal(self):
 
@@ -449,19 +463,19 @@ class UnitCellImage():
 
     def get_uc_func_image(self,func):
         x,y,p,c=self.pos_data.shape
-        x,y,sx,sy=self.uci.data.shape
+        x,y,sx,sy=self.data.shape
 
 
         return np.array([func(i,j) for i,j in zip( self.pos_data.reshape([x*y,p,c]),
-         self.uci.data.reshape([x*y,sx,sy]))]).reshape([x,y])
+         self.data.reshape([x*y,sx,sy]))]).reshape([x,y])
 
     def apply_to_ucs(self,func,**kwargs):
-        x,y,sx,sy=self.uci.data.shape
-        return np.array([func(i,**kwargs) for i in self.uci.data.reshape([x*y,sx,sy])]).reshape(self.uci.data.shape)
+        x,y,sx,sy=self.data.shape
+        return np.array([func(i,**kwargs) for i in self.data.reshape([x*y,sx,sy])]).reshape(self.data.shape)
 
 
     def recenter_uc_to_atom(self,pindex):
-        center = np.array(self.uci.data.shape[-2:])/2
+        center = np.array(self.data.shape[-2:])/2
         pimage = self.pos_data[:,:,pindex,:] - center[np.newaxis,np.newaxis,:]
         self.uc_centers_matrix+=pimage.astype("int")
         self.define_uc_roi()
@@ -477,7 +491,7 @@ class UnitCellImage():
         for i in range(x):
             ss=[]
             for j in range(y):
-                ss.append(am.Sublattice(self.pos_data[i,j],self.uci.data[i,j]))
+                ss.append(am.Sublattice(self.pos_data[i,j],self.data[i,j]))
 
             self.sublattice_stack.append(ss)
 
@@ -495,7 +509,44 @@ class UnitCellImage():
                     self.pos_data[i,j] = self.sublattice_stack[i][j].atom_positions
             print(str(i)+"/"+str(x))
 
-    
+    def save(self,*args,**kwargs):
+        self.metadata.set_item("UCS",{})
+        for k in self._save:
+          if k in self.__dict__.keys():
+            self.metadata.UCS[k]= self.__dict__[k]
+
+        super().save(*args,**kwargs)
+
+        #del self.metadata.UCS
+
+
+
+
+def load(fname):
+
+    s = hs.load(fname)
+    uci = UnitCellImage(uc_centers_matrix = s.metadata.UCS.uc_centers_matrix, data = s.data)
+
+    keys = [*s.metadata.UCS.__dict__.keys()][2:]
+    for k in keys:
+        uci.__dict__[k] = s.metadata.UCS[k]
+
+    if "_fix_sigmas" in keys:
+        if uci._fix_sigmas:
+                uci.model = UC_Model_fix_sigma(uci.data.shape[-2:],uci.pos_data.shape[-2],uci._sigmas).model
+                uci.gaus_model_params = np.zeros((uci.data.shape[0],
+                uci.data.shape[1],uci.pos_data.shape[-2],3))
+
+        else:
+                uci.model = UC_Model(uci.data.shape[-2:],uci.pos_data.shape[-2]).model
+                uci.gaus_model_params = np.zeros((uci.data.shape[0],
+                uci.data.shape[1],uci.pos_data.shape[-2],4))
+
+
+    if "pos_data" in keys:
+        uci.check_pos_data()
+
+    return uci
 
 
 
@@ -517,6 +568,18 @@ def plot_average_error(image,axis = 1,name=""):
     plt.gcf().canvas.draw()
 
     return ax
+
+def plot_compare(s1,s2):
+    def follow(obj):
+        s2.axes_manager.indices = obj.indices
+        s1.axes_manager.indices = obj.indices
+    s1.axes_manager.events.indices_changed._connected_all=set()
+    s1.axes_manager.events.indices_changed.connect(follow)
+    s2.axes_manager.events.indices_changed._connected_all=set()
+    s2.axes_manager.events.indices_changed.connect(follow)
+    s1.plot()
+    s2.plot()
+    
 
 
 
