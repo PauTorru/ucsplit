@@ -5,6 +5,7 @@ from scipy.ndimage import center_of_mass
 import matplotlib.pyplot as plt
 from ucsplit.refine import *
 import scipy.optimize as spo
+import skimage
 
 
 def polarization_dx(pos):
@@ -534,13 +535,8 @@ def load(fname):
     if "_fix_sigmas" in keys:
         if uci._fix_sigmas:
                 uci.model = UC_Model_fix_sigma(uci.data.shape[-2:],uci.pos_data.shape[-2],uci._sigmas).model
-                uci.gaus_model_params = np.zeros((uci.data.shape[0],
-                uci.data.shape[1],uci.pos_data.shape[-2],3))
-
         else:
                 uci.model = UC_Model(uci.data.shape[-2:],uci.pos_data.shape[-2]).model
-                uci.gaus_model_params = np.zeros((uci.data.shape[0],
-                uci.data.shape[1],uci.pos_data.shape[-2],4))
 
 
     if "pos_data" in keys:
@@ -579,6 +575,29 @@ def plot_compare(s1,s2):
     s2.axes_manager.events.indices_changed.connect(follow)
     s1.plot()
     s2.plot()
+
+
+def plot_polarization(uci,k=1,scale=20,color="yellow",head_width=10,**kwargs):
+
+    plt.figure()
+    plt.imshow(uci.original_image,cmap="gray")
+
+    dxi = uci.get_position_func_image(polarization_dx)
+    dyi = uci.get_position_func_image(polarization_dy)
+    pos = uci.uc_centers_matrix
+    nx,ny = dxi.shape
+
+    red_px,red_py,red_cx,red_cy = [skimage.measure.block_reduce(i[:nx//k*k,:ny//k*k],
+     k, np.mean).flatten() for i in [dxi,dyi,pos[:,:,0],pos[:,:,1]]]
+
+    for px,py,cx,cy in zip(*[i for i in [red_px,red_py,red_cx,red_cy]]):
+        plt.arrow(cx,cy,-scale*px,-scale*py,color="yellow",head_width = head_width,**kwargs)
+
+    plt.tight_layout()
+
+
+
+
     
 
 
