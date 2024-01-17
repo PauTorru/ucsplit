@@ -309,7 +309,7 @@ class UnitCellImage(hs.signals.Signal2D):
     def define_uc_atoms(self):
 
         self.pos_data = None
-
+        self.markers = None
         self.pos_data_gui=am.add_atoms_with_gui(self.inav[0,0])
 
 
