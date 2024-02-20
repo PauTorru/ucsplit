@@ -39,3 +39,23 @@ class UC_Model_fix_sigma:
         
         sy,sx = self.shape
         return A*np.exp(-((x/sx-x0)**2+(y/sy-y0)**2)/s**2)
+
+class UC_model_sxy:
+    def __init__(self,shape,n_peaks):
+        self.shape = shape
+        self.n_peaks = n_peaks
+        
+    def model(self,X,*params):
+        
+        x,y=X
+        p = np.array(params).reshape((self.n_peaks,4))
+
+        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
+    
+    def g(self, x,y,A,x0,y0,ssx,ssy):
+        
+        sy,sx = self.shape
+        return A*np.exp(-((x/sx-x0)**2)/ssx**2-((y/sy-y0)**2)/ssy**2)
+
+
+

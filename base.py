@@ -6,7 +6,10 @@ import matplotlib.pyplot as plt
 from ucsplit.refine import *
 import scipy.optimize as spo
 import skimage
-
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+import matplotlib.font_manager as fm
+import matplotlib as mpl
+from matplotlib import cm
 
 def polarization_dx(pos):
     A1,A2,A3,A4,B=pos
@@ -41,7 +44,7 @@ def plot_pos_large(pos,im,radius = 3):
     a[:,:,:] = _im[:,:,np.newaxis]
     
     for p in pos:
-        x,y = p.astype("int")
+        x,y = np.round(p,0).astype("int")
         a[y-radius:y+radius,x-radius:x+radius,:]=np.array([1,0,0])
     
     plt.figure()
@@ -175,7 +178,7 @@ def position_image(planes):
     for i,p in enumerate(planes):
         p_image[i,:]=np.vstack([p.x_position,p.y_position]).T
     
-    return np.round(p_image,0).astype("int")
+    return p_image
 
 
 def get_uc_signal(image,pimage,left,right,up,down):
@@ -219,15 +222,17 @@ def refine_image_positions_com(pos,image,iters=5,**args):
     for p in _pos:
         for _ in range(iters):
             p += refine_atom_position_com(p,image,**args)
+            #p = refine_atom_position_com(p,image,**args)
     return _pos
 
 
 def refine_atom_position_com(p,image,radius=5):
-    y,x=np.round(p,0).astype("int")
-    im=image[x-radius:x+radius,y-radius:y+radius]
-    im=norm(im)
-    c0,c1=center_of_mass(im)
-    return np.array([c1-radius+0.5,c0-radius+0.5])
+    x,y=p 
+    rr,cc = skimage.draw.disk((y,x),radius,shape = image.shape)
+    im = np.zeros_like(image)
+    im[rr,cc] = norm(image)[rr,cc]
+
+    return np.array(center_of_mass(im))[::-1]-p)
 
 
 
@@ -328,6 +333,7 @@ class UnitCellImage(hs.signals.Signal2D):
     def refine_uc_atoms_com(self,iters=5,**args):
         self.check_pos_data()
         for r in range(self.data.shape[0]):
+            print(r,"/",self.data.shape[0])
             for c in range(self.data.shape[1]):
                 _pos=self.pos_data.copy()
                 self.pos_data[r,c,:,:]=refine_image_positions_com(self.pos_data[r,c],
@@ -335,38 +341,52 @@ class UnitCellImage(hs.signals.Signal2D):
         self.uc_add_markers()
 
 
-    def refine_uc_atoms_2dgauss(self,sigmas=0.1,fix_sigmas=False):
+    def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1)):
+        r""" mode: "default", "fix_sigmas", "full2d" """
 
 
         xx,yy= np.meshgrid(*[range(i) for i in self.data.shape[-2:]][::-1])
         xy=(xx.ravel(),yy.ravel())
         self.xy=xy
-        self._fix_sigmas=fix_sigmas
-        if fix_sigmas:
+        if model =="fix_sigmas":
             if isinstance(sigmas,np.ndarray) is False:
                 sigmas=np.array(sigmas)
             self._sigmas = sigmas
             self.model = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2],sigmas).model
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],3))
+            pshape=3
 
-        else:
+        elif model =="default":
             self.model = UC_Model(self.data.shape[-2:],self.pos_data.shape[-2]).model
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],4))
+            pshape=4
+
+        elif model=="full2d":
+            self.model = UC_Model_sxy(self.data.shape[-2:],self.pos_data.shape[-2]).model
+            self.gaus_model_params = np.zeros((self.data.shape[0],
+            self.data.shape[1],self.pos_data.shape[-2],5))
+            pshape=5
+
+
+
+
 
         for r in range(self.data.shape[0]):
             for c in range(self.data.shape[1]):
 
                 im = norm(self.data[r,c])
 
-                if fix_sigmas:
-                    params = np.ones((self.pos_data.shape[-2],3))
-                    pshape = 3
-                else:
-                    params = np.ones((self.pos_data.shape[-2],4))
+                params = np.ones((self.pos_data.shape[-2],pshape))
+
+                if model =="default":
                     params[:,-1] = sigmas
-                    pshape = 4
+
+                elif model=="full2d":
+                    params[:,-1]=sigmas
+                    params[:,-2]=sigmas
+
 
 
                 params[:,0] = im[*self.pos_data[r,c].astype("int").T]
@@ -378,9 +398,10 @@ class UnitCellImage(hs.signals.Signal2D):
                         self.xy,
                         im.ravel(),
                         p0 = params.ravel(),
-                        bounds = (0,1),
+                        bounds = bounds,
                         xtol = 0.001,
-                        ftol =1e-3)
+                        ftol =1e-3,
+                        method="trf")
                     if c==0:
                         print(r"{}/{}".format(r,self.data.shape[0]))
                 except RuntimeError:
@@ -445,7 +466,7 @@ class UnitCellImage(hs.signals.Signal2D):
         
         for i in range(x):
             for j in range(y):
-                px,py=self.uc_centers_matrix[i,j,...].astype("int")
+                px,py=np.round(self.uc_centers_matrix[i,j,...],0).astype("int")
                 try:
                     ucs[i,j,...]=self.original_image[py+u:py+d,px+l:px+r]
                     self.uc_centers_matrix[i,j,:]=np.array([px+(r+l)/2,py+(u+d)/2])
@@ -577,13 +598,15 @@ def plot_compare(s1,s2):
     s2.plot()
 
 
-def plot_polarization(uci,k=1,scale=20,color="yellow",head_width=10,**kwargs):
+def plot_polarization(uci,dxi=None,dyi=None,k=1,scale=20,color="yellow",head_width=10,**kwargs):
 
     plt.figure()
     plt.imshow(uci.original_image,cmap="gray")
 
-    dxi = uci.get_position_func_image(polarization_dx)
-    dyi = uci.get_position_func_image(polarization_dy)
+    if dxi is None:
+        dxi = uci.get_position_func_image(polarization_dx)
+    if dyi is None:
+        dyi = uci.get_position_func_image(polarization_dy)
     pos = uci.uc_centers_matrix
     nx,ny = dxi.shape
 
@@ -594,6 +617,94 @@ def plot_polarization(uci,k=1,scale=20,color="yellow",head_width=10,**kwargs):
         plt.arrow(cx,cy,-scale*px,-scale*py,color="yellow",head_width = head_width,**kwargs)
 
     plt.tight_layout()
+
+    return dxi,dyi
+
+
+def plot_polarization_mod_angle(uci,**params):
+    pxi = uci.get_position_func_image(polarization_dx)
+    pyi = uci.get_position_func_image(polarization_dy)
+    pai = -np.arctan2(pyi,pxi)*180/np.pi+180
+    pmi = np.linalg.norm(np.dstack([pxi,pyi]),axis=-1)
+
+
+    fig = plt.gcf()
+    fig.clf()
+
+    fig,[ax1,ax2] = plt.subplots(2,1,figsize=(12,4), num = fig.number)
+
+
+
+
+    ax1.imshow(pai,vmin=0,vmax=360,cmap = "twilight")
+    title="Polarization Angle"
+    add_uci_scale_bar(ax1,uci,**params)
+    #cb = plt.colorbar()
+    #cb.set_label("degrees")
+
+
+    #plt.sca(ax2)
+
+    pmi_im = ax2.imshow(pmi)
+    title="Polarization modulus"
+    add_uci_scale_bar(ax2,uci,**params)
+    cb = plt.colorbar(pmi_im,ax=ax2,shrink = 0.8)
+    cb.set_label("px")
+
+    bs = ax1.get_position()
+    #cb_bs = [bs.xmax,bs.ymax-2*bs.height/4,bs.width/5,bs.height/5]
+    cb_bs = [bs.xmax+bs.width/12,bs.ymax-bs.height/2,bs.width/6,bs.height/6]
+
+    display_axes = fig.add_axes(cb_bs, projection='polar')
+    """display_axes._direction = 2*np.pi ## This is a nasty hack - using the hidden field to 
+                                      ## multiply the values such that 1 become 2*pi
+                                      ## this field is supposed to take values 1 or -1 only!!"""
+
+    norm = mpl.colors.Normalize(0,2*np.pi)
+
+    # Plot the colorbar onto the polar axis
+    # note - use orientation horizontal so that the gradient goes around
+    # the wheel rather than centre out
+    quant_steps = 2056
+    cb = mpl.colorbar.ColorbarBase(display_axes, cmap=cm.get_cmap('twilight',quant_steps),
+                                       norm=norm,
+                                       orientation='horizontal')
+
+    # aesthetics - get rid of border and axis labels                                   
+    cb.outline.set_visible(False) 
+
+    cb.set_ticks([0,np.pi/2,np.pi,3*np.pi/2])
+
+    display_axes.set_rlim([-1,1])
+
+    plt.tight_layout()
+
+    return pai,pmi
+
+
+
+
+
+def add_uci_scale_bar(ax,uci,unit_size = 20,unit_name="nm",fontsize = 18, *params):
+    ax.set_xticks([])
+    ax.set_yticks([])
+    fontprops = fm.FontProperties(size=fontsize)
+    scalebar = AnchoredSizeBar(ax.transData,
+                           unit_size/(uci.data.shape[-1]*uci.original_scale), str(unit_size)+unit_name, 'lower right', 
+                           pad=0.1,
+                           color='white',
+                           frameon=False,
+                           size_vertical=1,
+                           fontproperties=fontprops)
+
+    ax.add_artist(scalebar)
+
+
+def uci_image2image(uci_image,uci):
+    pass
+
+
+
 
 
 
