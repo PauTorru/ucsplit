@@ -11,6 +11,40 @@ import matplotlib.font_manager as fm
 import matplotlib as mpl
 from matplotlib import cm
 
+def fix_planes(p):
+    
+    l = max([len(j.atom_list) for j in p])
+    print(l)
+    ls = [len(i.atom_list) for i in p]
+    good = [i==l for i in ls]
+    orientation = np.array(p[0].zone_vector).argmax()
+
+    while not all(good):
+        i1 = good.index(False)
+        i2 = good[i1+1:].index(False)+i1+1
+
+        if len(p[i1].atom_list)+len(p[i2].atom_list)>l:
+            print("not fixable")
+            return
+
+        if orientation==0:
+            keep =np.array([min(j.get_x_position_list()) for j in[p[i1],p[i2]]]).argmin()
+        else:
+            keep =np.array([min(j.get_y_position_list()) for j in[p[i1],p[i2]]]).argmin()
+
+        if keep == 0:
+            p[i1].atom_list+=p[i2].atom_list
+            p.pop(i2)
+        if keep ==1:
+            p[i2].atom_list+=p[i1].atom_list
+            p.pop(i1)
+            
+        l = max([len(j.atom_list) for j in p])
+        ls = [len(i.atom_list) for i in p]
+        good = [i==l for i in ls]        
+
+    return p
+    
 def polarization_dx(pos):
     A1,A2,A3,A4,B=pos
     center = np.average([A1,A2,A3,A4],axis=0)
@@ -227,12 +261,12 @@ def refine_image_positions_com(pos,image,iters=5,**args):
 
 
 def refine_atom_position_com(p,image,radius=5):
-    x,y=p 
+    x,y=p #y,x=np.round(p,0).astype("int")
     rr,cc = skimage.draw.disk((y,x),radius,shape = image.shape)
     im = np.zeros_like(image)
     im[rr,cc] = norm(image)[rr,cc]
 
-    return np.array(center_of_mass(im))[::-1]-p)
+    return np.array(center_of_mass(im))[::-1]-p
 
 
 
@@ -620,12 +654,16 @@ def plot_polarization(uci,dxi=None,dyi=None,k=1,scale=20,color="yellow",head_wid
 
     return dxi,dyi
 
-
-def plot_polarization_mod_angle(uci,**params):
+def get_polarization_mod_angle(uci):
     pxi = uci.get_position_func_image(polarization_dx)
     pyi = uci.get_position_func_image(polarization_dy)
     pai = -np.arctan2(pyi,pxi)*180/np.pi+180
     pmi = np.linalg.norm(np.dstack([pxi,pyi]),axis=-1)
+    return pmi,pai
+
+
+def plot_polarization_mod_angle(uci,**params):
+    pmi,pai=get_polarization_mod_angle(uci)
 
 
     fig = plt.gcf()
