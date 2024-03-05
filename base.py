@@ -161,7 +161,7 @@ def filter_positions(pos,x_max = None,x_min = None,y_max = None,y_min = None):
 
 
 
-def bob_angle(B1,O,B2):
+def bob_angle(pos):
     """Calculate angle in degrees between atom positions B1-O-B2, with O at vertex.
     
     Parameters:
@@ -172,26 +172,18 @@ def bob_angle(B1,O,B2):
     ---------
     angle : float 
         angle in degrees"""
+    B1,O1,B2,O2,B3=pos
 
-    _B1=B1-O
-    _B2=B2-O
-    return (180./np.pi)*np.arccos(np.dot(_B1,_B2)/(np.linalg.norm(_B1)*np.linalg.norm(_B2)))
-
-def bob_angle_from_positions(pos):
-    """Calculate angle in degrees between atom positions B1-O-B2, with O at vertex.
+    _B1=B1-O1
+    _B2=B2-O1
+    angle1 = (180./np.pi)*np.arccos(np.dot(_B1,_B2)/(np.linalg.norm(_B1)*np.linalg.norm(_B2)))
     
-    Parameters:
-    -----------
-    pos : array of shape[x,y,[B1x,Ox,B2x],[B1y,Oy,B2y]]
+    _B1=B2-O2
+    _B2=B3-O2
+    angle2 = (180./np.pi)*np.arccos(np.dot(_B1,_B2)/(np.linalg.norm(_B1)*np.linalg.norm(_B2)))
 
-    Returns:
-    ---------
-    angle : float 
-        angle in degrees"""
-    B1,O,B2 = pos
-    _B1=B1-O
-    _B2=B2-O
-    return (180./np.pi)*np.arccos(np.dot(_B1,_B2)/(np.linalg.norm(_B1)*np.linalg.norm(_B2)))
+    return np.average([angle1,angle2])
+
 
 def position_image(planes):
     """Generate array with atom coordinates in every pixel.
