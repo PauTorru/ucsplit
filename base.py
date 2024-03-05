@@ -44,7 +44,7 @@ def fix_planes(p):
         good = [i==l for i in ls]        
 
     return p
-    
+
 def polarization_dx(pos):
     A1,A2,A3,A4,B=pos
     center = np.average([A1,A2,A3,A4],axis=0)
@@ -390,18 +390,25 @@ class UnitCellImage(hs.signals.Signal2D):
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],3))
             pshape=3
+            init_params = np.ones((self.pos_data.shape[-2],pshape))
 
         elif model =="default":
             self.model = UC_Model(self.data.shape[-2:],self.pos_data.shape[-2]).model
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],4))
             pshape=4
+            init_params = np.ones((self.pos_data.shape[-2],pshape))
+            init_params[:,-1] = sigmas
 
         elif model=="full2d":
             self.model = UC_Model_sxy(self.data.shape[-2:],self.pos_data.shape[-2]).model
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],5))
             pshape=5
+            init_params = np.ones((self.pos_data.shape[-2],pshape))
+            init_params[:,-1]=sigmas
+            init_params[:,-2]=sigmas
+
 
 
 
@@ -412,26 +419,16 @@ class UnitCellImage(hs.signals.Signal2D):
 
                 im = norm(self.data[r,c])
 
-                params = np.ones((self.pos_data.shape[-2],pshape))
 
-                if model =="default":
-                    params[:,-1] = sigmas
-
-                elif model=="full2d":
-                    params[:,-1]=sigmas
-                    params[:,-2]=sigmas
-
-
-
-                params[:,0] = im[*self.pos_data[r,c].astype("int").T]
-                params[:,1:3] = self.pos_data[r,c]
-                params[:,1]/= self.data.shape[-1]
-                params[:,2]/= self.data.shape[-2]
+                init_params[:,0] = im[*self.pos_data[r,c].astype("int").T]
+                init_params[:,1:3] = self.pos_data[r,c]
+                init_params[:,1]/= self.data.shape[-1]
+                init_params[:,2]/= self.data.shape[-2]
                 try:
                     res, _ = spo.curve_fit(self.model,
                         self.xy,
                         im.ravel(),
-                        p0 = params.ravel(),
+                        p0 = init_params.ravel(),
                         bounds = bounds,
                         xtol = 0.001,
                         ftol =1e-3,
