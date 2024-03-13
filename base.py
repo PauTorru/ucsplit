@@ -341,7 +341,7 @@ class UnitCellImage(hs.signals.Signal2D):
 
         self.pos_data = None
         self.markers = None
-        self.pos_data_gui=am.add_atoms_with_gui(self.inav[0,0])
+        self.pos_data_gui=am.add_atoms_with_gui(self.inav[0,0],distance_threshold=1)
 
 
         # put them in eahc unit cell and set pos_data atribute
