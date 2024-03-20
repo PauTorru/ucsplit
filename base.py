@@ -367,7 +367,7 @@ class UnitCellImage(hs.signals.Signal2D):
         self.uc_add_markers()
 
 
-    def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1)):
+    def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1),xtol=0.001,ftol=1e-3,use_jacobian=True):
         r""" mode: "default", "fix_sigmas", "full2d" """
 
 
@@ -379,6 +379,7 @@ class UnitCellImage(hs.signals.Signal2D):
                 sigmas=np.array(sigmas)
             self._sigmas = sigmas
             self.model = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2],sigmas).model
+            self.jacobian = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2]).jacobian
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],3))
             pshape=3
@@ -386,6 +387,7 @@ class UnitCellImage(hs.signals.Signal2D):
 
         elif model =="default":
             self.model = UC_Model(self.data.shape[-2:],self.pos_data.shape[-2]).model
+            self.jacobian = UC_Model(self.data.shape[-2:],self.pos_data.shape[-2]).jacobian
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],4))
             pshape=4
@@ -394,6 +396,7 @@ class UnitCellImage(hs.signals.Signal2D):
 
         elif model=="full2d":
             self.model = UC_Model_sxy(self.data.shape[-2:],self.pos_data.shape[-2]).model
+            self.jacobian = UC_Model_sxy(self.data.shape[-2:],self.pos_data.shape[-2]).jacobian
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],5))
             pshape=5
@@ -401,7 +404,8 @@ class UnitCellImage(hs.signals.Signal2D):
             init_params[:,-1]=sigmas
             init_params[:,-2]=sigmas
 
-
+        if not use_jacobian:
+            self.jacobian = None
 
 
 
@@ -412,7 +416,7 @@ class UnitCellImage(hs.signals.Signal2D):
                 im = norm(self.data[r,c])
 
 
-                init_params[:,0] = im[*self.pos_data[r,c].astype("int").T]
+                init_params[:,0] = im[*self.pos_data[r,c].astype("int")[:,::-1].T]
                 init_params[:,1:3] = self.pos_data[r,c]
                 init_params[:,1]/= self.data.shape[-1]
                 init_params[:,2]/= self.data.shape[-2]
@@ -422,9 +426,9 @@ class UnitCellImage(hs.signals.Signal2D):
                         im.ravel(),
                         p0 = init_params.ravel(),
                         bounds = bounds,
-                        xtol = 0.001,
-                        ftol =1e-3,
-                        method="trf")
+                        xtol = xtol,
+                        ftol = ftol,
+                        method="trf",jac = self.jacobian)
                     if c==0:
                         print(r"{}/{}".format(r,self.data.shape[0]))
                 except RuntimeError:
