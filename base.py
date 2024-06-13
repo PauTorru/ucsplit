@@ -366,7 +366,9 @@ class UnitCellImage(hs.signals.Signal2D):
                     self.data[r,c],iters,**args)
         self.uc_add_markers()
 
-
+    def refine_uc_atoms_2dgauss_smart(self):
+        pass
+        
     def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1),xtol=0.001,ftol=1e-3,use_jacobian=True):
         r""" mode: "default", "fix_sigmas", "full2d" """
 
@@ -461,7 +463,17 @@ class UnitCellImage(hs.signals.Signal2D):
     def uc_add_markers(self):
         if "Markers" in [i[0] for i in list(self.metadata)]:
             del self.metadata.Markers
-        self.markers=[hs.markers.point(self.pos_data[:,:,p,0],self.pos_data[:,:,p,1],color="red") for p in range(self.pos_data.shape[2])]
+
+        self.markers=[]
+        for atom in range(self.pos_data.shape[2]):
+            offsets = np.empty(self.axes_manager.navigation_shape, dtype=object)
+            marker_pos = self.pos_data[:,:,atom,:].transpose([1,0,2])
+            for i in np.ndindex(self.axes_manager.navigation_shape):
+                offsets[i] = [marker_pos[i],]
+
+            marker = hs.plot.markers.Points(offsets=offsets,color="red",sizes=5)
+            self.markers.append(marker)
+
         self.add_marker(self.markers,permanent=True,plot_marker=False)
 
     def _get_uc_signal(self):
@@ -627,7 +639,7 @@ def plot_compare(s1,s2):
 
 def plot_polarization(uci,dxi=None,dyi=None,k=1,scale=20,color="yellow",head_width=10,**kwargs):
 
-    plt.figure()
+    #plt.figure()
     plt.imshow(uci.original_image,cmap="gray")
 
     if dxi is None:
@@ -730,6 +742,26 @@ def add_uci_scale_bar(ax,uci,unit_size = 20,unit_name="nm",fontsize = 18, *param
 
     ax.add_artist(scalebar)
 
+
+def add_scale_bar(ax,s,unit_size = 20,unit_name="nm",fontsize = 18,pad=0.1, *params):
+    ax.set_xticks([])
+    ax.set_yticks([])
+    fontprops = fm.FontProperties(size=fontsize)
+    scalebar = AnchoredSizeBar(ax.transData,
+                           unit_size/(s.axes_manager[0].scale), str(unit_size)+unit_name, 'lower right', 
+                           pad=pad,
+                           color='white',
+                           frameon=False,
+                           size_vertical=2,
+                           fontproperties=fontprops)
+
+    ax.add_artist(scalebar)
+
+def fix_old_save(fname):
+    with h5py.File("uci_18.hspy","r+") as f:
+        del f["Experiments"]['__unnamed__']["metadata"]["Markers"]
+        f.close()
+        return
 
 def uci_image2image(uci_image,uci):
     pass
