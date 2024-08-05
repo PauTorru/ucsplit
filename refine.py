@@ -184,5 +184,58 @@ class UC_Model_sxy:
         return jac.reshape([-1,jac.shape[-1]]).T
 
 
+class UC_Model_rotation:
+    def __init__(self,shape,n_peaks):
+        self.shape = shape
+        self.n_peaks = n_peaks
+        
+    def model(self,X,*params):
+        
+        x,y=X
+        p = np.array(params).reshape((self.n_peaks,6))
 
+        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
+    
+    def g(self, x,y,A,x0,y0,a,b,c):
+        
+        sy,sx = self.shape
+        return A*np.exp( -(((x/sx-x0)**2)/(a**2) +((y/sy-y0)**2)/(b**2) +(x/sx-x0)*(y/sy-y0)/c**2))
+
+    def dg(self,x,y,A,x0,y0,a,b,c):
+
+        sy,sx = self.shape
+
+        cx = x/sx-x0
+        ex = cx/a
+        ex2 = -ex**2
+
+        cy = (y/sy-y0)
+        ey = cy/b
+        ey2 = -ey**2
+
+        exy= -cx*cy/c**2
+
+        ee =np.exp(ex2+ey2+exy)
+
+        T = A*ee
+
+        dA = ee
+
+        dx0 = T*(2*cx/a**2+cy/c**2)
+
+        dy0 = T*(2*cy/b**2+cy/c**2)
+
+
+        da = -2*ex2*T/a
+        db = -2*ey2*T/b
+        dc = -2*exy*T/c
+
+        return [dA,dx0,dy0,da,db,dc]
+
+
+    def jacobian(self,X,*params):
+        x,y=X
+        p = np.array(params).reshape((self.n_peaks,6))
+        jac = np.array([self.dg(x,y,*pl) for pl in p])
+        return jac.reshape([-1,jac.shape[-1]]).T
 

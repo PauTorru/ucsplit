@@ -10,6 +10,7 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.font_manager as fm
 import matplotlib as mpl
 from matplotlib import cm
+import h5py
 
 def fix_planes(p):
     
@@ -123,12 +124,6 @@ def filter_positions_line(pos,line,remove_where):
     w = np.array([_filter(p) for p in pos])
 
     return pos[w]
-
-
-
-
-
-
 
 
 def filter_positions(pos,x_max = None,x_min = None,y_max = None,y_min = None):
@@ -331,8 +326,13 @@ class UnitCellImage(hs.signals.Signal2D):
     def define_uc_roi(self):
         x,y=self.uc_centers_matrix[0,0]
         bx,by=self.bounds
-        vsignal=hs.signals.Signal2D(self.original_image[y-by:y+by,x-bx:x+bx])
-        vsignal.plot()
+        if self.original_image.ndim ==2:
+            vsignal=hs.signals.Signal2D(self.original_image[y-by:y+by,x-bx:x+bx])
+            vsignal.plot()
+        if self.original_image.ndim ==3:
+            vsignal=hs.signals.Signal2D(self.original_image[y-by:y+by,x-bx:x+bx].sum(-1))
+            vsignal.plot()
+
         self.roi = hs.roi.RectangularROI(left=bx//2, right=3*bx//2, top=by//2, bottom=3*by//2)
         im_roi = self.roi.interactive(vsignal, color="red")
     
@@ -369,7 +369,7 @@ class UnitCellImage(hs.signals.Signal2D):
     def refine_uc_atoms_2dgauss_smart(self):
         pass
         
-    def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1),xtol=0.001,ftol=1e-3,use_jacobian=True):
+    def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1),xtol=0.001,ftol=1e-3,use_jacobian=True,loss="linear"):
         r""" mode: "default", "fix_sigmas", "full2d" """
 
 
@@ -406,6 +406,23 @@ class UnitCellImage(hs.signals.Signal2D):
             init_params[:,-1]=sigmas
             init_params[:,-2]=sigmas
 
+        elif model=="full2d_rotation":
+            self.model = UC_Model_rotation(self.data.shape[-2:],self.pos_data.shape[-2]).model
+            self.jacobian = UC_Model_rotation(self.data.shape[-2:],self.pos_data.shape[-2]).jacobian
+            self.gaus_model_params = np.zeros((self.data.shape[0],
+            self.data.shape[1],self.pos_data.shape[-2],6))
+            pshape=6
+            init_params = np.ones((self.pos_data.shape[-2],pshape))
+            init_params[:,-2]=sigmas
+            init_params[:,-3]=sigmas
+            init_params[:,-1]=sigmas
+        else:
+            return "Model Not available"
+
+
+
+
+
         if not use_jacobian:
             self.jacobian = None
 
@@ -430,7 +447,7 @@ class UnitCellImage(hs.signals.Signal2D):
                         bounds = bounds,
                         xtol = xtol,
                         ftol = ftol,
-                        method="trf",jac = self.jacobian)
+                        method="trf",jac = self.jacobian,loss=loss)
                     if c==0:
                         print(r"{}/{}".format(r,self.data.shape[0]))
                 except RuntimeError:
@@ -500,8 +517,10 @@ class UnitCellImage(hs.signals.Signal2D):
         bx,by=self.bounds
         l,r,u,d =[int(i) for i in (self.roi.left-bx,self.roi.right-bx,
                     self.roi.top-by,self.roi.bottom-by)]
-
-        ucs=np.zeros([x,y,d-u,r-l])
+        if self.original_image.ndim==2:
+            ucs=np.zeros([x,y,d-u,r-l])
+        if self.original_image.ndim==3:
+            ucs=np.zeros([x,y,d-u,r-l,self.original_image.shape[-1]])
         
         for i in range(x):
             for j in range(y):
@@ -758,10 +777,17 @@ def add_scale_bar(ax,s,unit_size = 20,unit_name="nm",fontsize = 18,pad=0.1, *par
     ax.add_artist(scalebar)
 
 def fix_old_save(fname):
-    with h5py.File("uci_18.hspy","r+") as f:
+    with h5py.File(fname,"r+") as f:
         del f["Experiments"]['__unnamed__']["metadata"]["Markers"]
         f.close()
         return
+
+def plot_planes(s,planes):
+    plt.clf()
+    plt.imshow(s.data,cmap="gray")
+
+    for p in planes:
+        plt.plot(p.x_position,p.y_position,"-")
 
 def uci_image2image(uci_image,uci):
     pass
