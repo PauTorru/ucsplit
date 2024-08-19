@@ -678,16 +678,18 @@ def plot_polarization(uci,dxi=None,dyi=None,k=1,scale=20,color="yellow",head_wid
 
     return dxi,dyi
 
-def get_polarization_mod_angle(uci):
-    pxi = uci.get_position_func_image(polarization_dx)
-    pyi = uci.get_position_func_image(polarization_dy)
+def get_polarization_mod_angle(uci,pxi=None,pyi=None):
+    if pxi is None:
+        pxi = uci.get_position_func_image(polarization_dx)
+    if pyi is None:
+        pyi = uci.get_position_func_image(polarization_dy)
     pai = -np.arctan2(pyi,pxi)*180/np.pi+180
     pmi = np.linalg.norm(np.dstack([pxi,pyi]),axis=-1)
     return pmi,pai
 
 
-def plot_polarization_mod_angle(uci,**params):
-    pmi,pai=get_polarization_mod_angle(uci)
+def plot_polarization_mod_angle(uci,pxi=None,pyi=None,**params):
+    pmi,pai=get_polarization_mod_angle(uci,pxi,pyi)
 
 
     fig = plt.gcf()

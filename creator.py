@@ -2,13 +2,17 @@ from skimage.feature import peak_local_max
 import sklearn
 from sklearn.cluster import DBSCAN
 import atomap.api as am
+import ucsplit.base as uc
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 class uci_creator:
     def __init__(self,s):
         self.s = s
 
     def peak_locator(self,min_distance=10):
-        self.positions = peak_local_max(s.data, min_distance = min_distance)[:,::-1]
+        self.positions = peak_local_max(self.s.data, min_distance = min_distance)[:,::-1]
 
         uc.plot_pos_large(self.positions,self.s.data)
 
