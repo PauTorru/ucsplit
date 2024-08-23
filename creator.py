@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-class uci_creator:
+class Uci_Creator:
     def __init__(self,s):
         self.s = s
 
@@ -16,7 +16,7 @@ class uci_creator:
 
         uc.plot_pos_large(self.positions,self.s.data)
 
-    def construct_zone_axes(self,n_neighbors=9):
+    def construct_zone_axes(self,n_neighbors=9,**kwargs):
         self.positions=np.array(self.positions)
         
         NN = sklearn.neighbors.NearestNeighbors(n_neighbors=n_neighbors)
@@ -27,7 +27,7 @@ class uci_creator:
         self.relative_positions-=self.relative_positions[:,0,:][:,np.newaxis,:]
         self.relative_positions =self.relative_positions[:,1:,:]/np.linalg.norm(self.relative_positions[:,1:,:],axis=2).min()
         self.idx = self.idx[:,1:]
-        self.db = DBSCAN(eps=0.5, min_samples=10).fit(self.relative_positions.reshape((-1,2)))
+        self.db = DBSCAN(**kwargs).fit(self.relative_positions.reshape((-1,2)))
         self.labels = self.db.labels_.reshape(self.relative_positions.shape[:-1])
         self.centroids=np.array([self.relative_positions.reshape((-1,2))[self.db.labels_==i].mean(0) for i in range(self.db.labels_.max()+1)])
         print("clustered")
@@ -48,7 +48,7 @@ class uci_creator:
     def get_planes(self,id):
         
         self.taken = np.zeros(self.positions.shape[0],dtype="bool")
-        dst = np.linalg.norm(self.positions,axis=1)
+        dst = np.linalg.norm(self.positions,axis=1,ord=1)
         i0 = dst.argmin()
         self.taken[i0]=True
 
