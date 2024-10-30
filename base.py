@@ -435,7 +435,7 @@ class UnitCellImage(hs.signals.Signal2D):
                 im = norm(self.data[r,c])
 
                 idxs = self.pos_data[r,c].astype("int")[:,::-1].T
-                init_params[:,0] = im[[i[0] for i in idxs],[i[1] for i in idxs]]
+                init_params[:,0] = im[[i for i in idxs[0]],[i for i in idxs[1] ]]
                 #init_params[:,0] = im[*self.pos_data[r,c].astype("int")[:,::-1].T]
                 init_params[:,1:3] = self.pos_data[r,c]
                 init_params[:,1]/= self.data.shape[-1]

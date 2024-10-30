@@ -60,7 +60,7 @@ class Uci_Creator:
             dst[self.taken]=np.inf
             i0 = dst.argmin()
 
-        return planes
+        return np.array(planes)
 
 
     def create_plane(self,i0,za):
