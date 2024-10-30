@@ -381,7 +381,7 @@ class UnitCellImage(hs.signals.Signal2D):
                 sigmas=np.array(sigmas)
             self._sigmas = sigmas
             self.model = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2],sigmas).model
-            self.jacobian = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2]).jacobian
+            self.jacobian = UC_Model_fix_sigma(self.data.shape[-2:],self.pos_data.shape[-2],sigmas).jacobian
             self.gaus_model_params = np.zeros((self.data.shape[0],
             self.data.shape[1],self.pos_data.shape[-2],3))
             pshape=3
@@ -434,8 +434,9 @@ class UnitCellImage(hs.signals.Signal2D):
 
                 im = norm(self.data[r,c])
 
-
-                init_params[:,0] = im[*self.pos_data[r,c].astype("int")[:,::-1].T]
+                idxs = self.pos_data[r,c].astype("int")[:,::-1].T
+                init_params[:,0] = im[[i[0] for i in idxs],[i[1] for i in idxs]]
+                #init_params[:,0] = im[*self.pos_data[r,c].astype("int")[:,::-1].T]
                 init_params[:,1:3] = self.pos_data[r,c]
                 init_params[:,1]/= self.data.shape[-1]
                 init_params[:,2]/= self.data.shape[-2]
