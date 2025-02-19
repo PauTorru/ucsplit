@@ -11,6 +11,7 @@ import matplotlib.font_manager as fm
 import matplotlib as mpl
 from matplotlib import cm
 import h5py
+import sklearn
 
 def fix_planes(p):
     
@@ -589,6 +590,90 @@ class UnitCellImage(hs.signals.Signal2D):
                 if use_as_pos_data:
                     self.pos_data[i,j] = self.sublattice_stack[i][j].atom_positions
             print(str(i)+"/"+str(x))
+
+    def flatten_positions(self,radius=5):
+        """Returns positions of UCI, accounting for overlaps if the positions are closer than \" radius\" ."""
+        pd = self.pos_data
+        centers = self.uc_centers_matrix
+        shift = np.array(self.data.shape[-2:])/2
+        
+        flat_positions = []
+        pos_data_flat_id = np.zeros(pd.shape[:-1])
+        k=0
+        nrows,ncols,natoms,ncoords = pd.shape
+        for r in range(nrows):
+            for c in range(ncols):
+                for atom in range(natoms):
+                    p = centers[r,c]
+                    a_pos = p-shift+pd[r,c,atom]
+                    flat_positions.append(a_pos)
+                    pos_data_flat_id[r,c,atom]=k
+                    k+=1
+
+        flat_pos = np.array(flat_positions)
+        NN = sklearn.neighbors.NearestNeighbors(n_neighbors=natoms)
+        neighs = NN.fit(flat_pos)
+        d,idx = neighs.kneighbors(flat_pos)
+        filtered = [tuple(sorted(i[j]))for i,j in zip(idx,d<radius)]
+        uniques = list(set(filtered))
+        
+        actual_pos_data_id =[]
+        for idd in pos_data_flat_id.ravel():
+            actual_pos_data_id.append(np.array([idd in i for i in uniques]).argmax())
+        actual_pos_data_id = np.array(actual_pos_data_id).reshape(pd.shape[:-1])
+
+        self.pos_data_flat_id=actual_pos_data_id
+        self.flat_uniques = np.array([flat_pos[list(i)].mean(0) for i in uniques])
+
+
+        return self.flat_uniques
+
+    def calibrate_with_distance_between_equivalents(self,n_atom,direction,range,physical_distance,unit="nm"):
+    """Calibrate pixel size using the distance between each equivalent atom in range.
+
+    Parameters:
+    -----------
+    n_atom : int 
+        Index of atom for which the distance to its neighbouring equivalent will be calculated
+
+    direction: int
+        0 == vertical direction (distance between atom and the equivalent in the next row)
+        1 == horizontal direction (distance between atom and the equivalent in the nex column)
+
+    range: np.s_
+        Slicer for which unitcells should be used. E.g. np.s_[:10,:] to calibrate using only the first ten rows of unit cells.
+
+    physical_distance: float
+        Value of the expected physical distance between equivalent atoms.
+
+    unit: str
+        units of the specified physical distance (e.g. "nm","um",...).
+        
+    Returns:
+    ---------
+    pixel_size: float
+    
+    """
+    if not hasattr(self,"flat_uniques"):
+        self.flatten_positions()
+
+    actual_positions = self.flat_uniques[self.pos_data_flat_id]
+
+    reference_atom_positions= actual_positions[:,:,n_atom,:]
+    
+    position_to_use = reference_atom_positions[range]
+
+    if direction == 0: 
+        mean_pixel_distance = np.linalg.norm(position_to_use[1:]-position_to_use[:-1],axis=-1).mean((0,1))
+    elif direction ==1:
+        mean_pixel_distance = np.linalg.norm(position_to_use[:,1:]-position_to_use[:,:-1],axis=-1).mean((0,1))
+    else:
+        raise Exception("Direction has to be 0 or 1")
+
+    pixel_size = physical_distance/mean_pixel_distance
+    self.uci_calibrated_scale_unit="nm"
+    self.uci_calibrated_scale = pixel_size
+    return pixel_size
 
     def save(self,*args,**kwargs):
         self.metadata.set_item("UCS",{})
