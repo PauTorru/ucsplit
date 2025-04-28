@@ -427,6 +427,7 @@ class UnitCellImage(hs.signals.Signal2D):
             init_params[:,-2]=sigmas
             init_params[:,-3]=sigmas
             init_params[:,-1]=sigmas
+            n_atoms = self.pos_data.shape[-2]
             if bounds ==(0,1):#default
                 bounds =(tuple(n_atoms*[0,0,0,0,0,-1]),#rotation limits
                     tuple(n_atoms*[1,1,1,1,1,1])) 
