@@ -71,19 +71,24 @@ def polarization_dy(pos):
     
     return np.dot(rel_pos,y_dir)
 
-def plot_pos_large(pos,im,radius = 3):
+def plot_pos_large(positions,im,radius = 3,colors=[[1,0,0],]):
+    if not isinstance(positions,list):
+        ps =[positions]
+    else:
+        ps = positions
+
     y,x = im.shape
     a = np.zeros([y,x,3])
     
     _im = norm(im)
     
     a[:,:,:] = _im[:,:,np.newaxis]
+    for pos, color in zip(ps,colors):
+        for p in pos:
+            x,y = np.round(p,0).astype("int")
+            a[y-radius:y+radius,x-radius:x+radius,:]=np.array(color)
     
-    for p in pos:
-        x,y = np.round(p,0).astype("int")
-        a[y-radius:y+radius,x-radius:x+radius,:]=np.array([1,0,0])
-    
-    plt.figure()
+    plt.figure("Atom Positions")
     plt.imshow(a)
 
     
@@ -316,9 +321,15 @@ class UnitCellImage(hs.signals.Signal2D):
       'pos_data', 'xy', '_fix_sigmas', 'gaus_model_params',"_save"]
         if data is None:
             self.uc_roi = self.define_uc_roi()
+            super().__init__(np.eye(2),*args,**kwargs) # place holder initialization
+            fig = plt.gcf()
+            fig.canvas.mpl_connect("close_event",self.init_onclose)
+            
         else:
             super().__init__(data,*args,**kwargs)#self.uci = hs.signals.Signal2D(uc_data)
 
+    def init_onclose(self,event):
+        self.build()
 
     def build(self,*args,**kwargs):
         #self.uci=hs.signals.Signal2D(self._get_uc_signal(),*args,**kwargs)
@@ -345,6 +356,7 @@ class UnitCellImage(hs.signals.Signal2D):
         self.pos_data_gui=am.add_atoms_with_gui(self.inav[0,0],distance_threshold=1)
 
 
+
         # put them in eahc unit cell and set pos_data atribute
 
     def check_pos_data(self):
@@ -367,8 +379,6 @@ class UnitCellImage(hs.signals.Signal2D):
                     self.data[r,c],iters,**args)
         self.uc_add_markers()
 
-    def refine_uc_atoms_2dgauss_smart(self):
-        pass
         
     def refine_uc_atoms_2dgauss(self,sigmas=0.1,model="default",bounds = (0,1),xtol=0.001,ftol=1e-3,use_jacobian=True,loss="linear"):
         r""" mode: "default", "fix_sigmas", "full2d" """
@@ -417,6 +427,28 @@ class UnitCellImage(hs.signals.Signal2D):
             init_params[:,-2]=sigmas
             init_params[:,-3]=sigmas
             init_params[:,-1]=sigmas
+            if bounds ==(0,1):#default
+                bounds =(tuple(n_atoms*[0,0,0,0,0,-1]),#rotation limits
+                    tuple(n_atoms*[1,1,1,1,1,1])) 
+
+        elif model == "full2d_rotation_background":
+            self.model = UC_Model_rotation_background(self.data.shape[-2:],self.pos_data.shape[-2]).model
+            self.jacobian = UC_Model_rotation_background(self.data.shape[-2:],self.pos_data.shape[-2]).jacobian
+            self.gaus_model_params = np.zeros((self.data.shape[0],
+            self.data.shape[1],self.pos_data.shape[-2],9))
+            pshape=9
+            init_params = np.ones((self.pos_data.shape[-2],pshape))
+            init_params[:,-5]=sigmas
+            init_params[:,-6]=sigmas
+            init_params[:,-4]=sigmas
+            init_params[:,-3]=0
+            init_params[:,-2]=0
+            init_params[:,-1]=0
+            n_atoms = self.pos_data.shape[-2]
+            if bounds ==(0,1):#default
+                bounds =(tuple(n_atoms*[0,0,0,0,0,0,-1,-1,-1]),# Not sure this is a good idea
+                    tuple(n_atoms*[1,1,1,1,1,1,1,1,1])) 
+
         else:
             return "Model Not available"
 
@@ -561,7 +593,8 @@ class UnitCellImage(hs.signals.Signal2D):
         pimage = self.pos_data[:,:,pindex,:] - center[np.newaxis,np.newaxis,:]
         self.uc_centers_matrix+=pimage.astype("int")
         self.define_uc_roi()
-        print("Remember to call build() after deining new ROI")
+        fig = plt.gcf()
+        fig.canvas.mpl_connect("close_event",self.init_onclose)
         return
 
 
@@ -881,7 +914,37 @@ def uci_image2image(uci_image,uci):
     pass
 
 
+def plot_over_image(im,uci,t,vmin=None,vmax=None,i=0.3,cmap="jet",levels=900):
+    #plt.clf()
+    plt.imshow(im,cmap="gray",alpha=1)
+    x,y,z =uci.uc_centers_matrix[...,0].ravel(),uci.uc_centers_matrix[...,1].ravel(),t.ravel().copy()
 
+    if vmin is None:
+        vmin=z.min()
+    if vmax is None:
+        vmax=z.max()
+    tri = mpl.tri.Triangulation(x,y)
+    analyzer = mpl.tri.TriAnalyzer(tri)
+    mask = analyzer.get_flat_tri_mask(min_circle_ratio=0.17, rescale=True) 
+    tri.set_mask(mask)
+    z[z>vmax]=vmax
+    z[z<vmin]=vmin
+    
+    cf = plt.tricontourf(x,y,z,levels=np.linspace(vmin,vmax,levels),
+                         alpha=1,
+                   antialiased=False,cmap=cmap,vmin=vmin,vmax=vmax,norm="linear")
+    
+    
+    cb = plt.colorbar()
+    cb.solids.set(alpha=1)
+    #cb.set_label("Lattice angle (degrees)",fontsize=20)
+    #uc.add_scale_bar(plt.gca(),s,unit_size=0,)
+    ax = plt.gca()
+    ax.set_xticks([])
+    ax.set_yticks([])
+    
+    plt.imshow(im,cmap="gray",alpha=(i)*norm(im)+(1-i),zorder=3)
+    return cb
 
 
 
