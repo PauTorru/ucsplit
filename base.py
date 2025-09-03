@@ -892,7 +892,7 @@ def add_scale_bar(ax,s,unit_size = 20,unit_name="nm",fontsize = 18,pad=0.1,size_
                            pad=pad,
                            color='white',
                            frameon=False,
-                           size_vertical=2,
+                           size_vertical=size_vertical,
                            fontproperties=fontprops)
 
     ax.add_artist(scalebar)
