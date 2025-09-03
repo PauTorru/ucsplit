@@ -52,7 +52,7 @@ class Uci_Creator:
         plt.clf()
         plt.imshow(self.s.data,cmap="gray")
         self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-        self.selector = PolygonSelector(plt.gca(),self.onselect,props={"color" : selector_color,"linewidth":3})
+        self.selector = PolygonSelector(plt.gca(),self.onselect,props={"color" : selector_color,"linewidth":3},useblit=True)
 
         
     def plot_zone_axes(self):
