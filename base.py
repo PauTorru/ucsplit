@@ -313,12 +313,12 @@ class UnitCellImage(hs.signals.Signal2D):
             self.original_image = image.data
         
         self.bounds = (boundx,boundy)
-        self.pos_data = None
+        #self.pos_data = None
         self.markers = None
 
         self._save = ['uc_centers_matrix',
       'original_image', 'bounds','original_scale','_sigmas',
-      'pos_data', 'xy', '_fix_sigmas', 'gaus_model_params',"_save"]
+      'pos_data', 'xy', '_fix_sigmas', 'gaus_model_params',"_save","_uc_slicers"]
         if data is None:
             self.uc_roi = self.define_uc_roi()
             super().__init__(np.eye(2),*args,**kwargs) # place holder initialization
@@ -353,7 +353,7 @@ class UnitCellImage(hs.signals.Signal2D):
 
         self.pos_data = None
         self.markers = None
-        self.pos_data_gui=am.add_atoms_with_gui(self.inav[0,0],distance_threshold=1)
+        self.pos_data_gui=am.add_atoms_with_gui(self.mean((0,1)),distance_threshold=1)
 
 
 
@@ -556,13 +556,15 @@ class UnitCellImage(hs.signals.Signal2D):
             ucs=np.zeros([x,y,d-u,r-l])
         if self.original_image.ndim==3:
             ucs=np.zeros([x,y,d-u,r-l,self.original_image.shape[-1]])
-        
+
+        self._uc_slicers={}
         for i in range(x):
             for j in range(y):
                 px,py=np.round(self.uc_centers_matrix[i,j,...],0).astype("int")
                 try:
                     ucs[i,j,...]=self.original_image[py+u:py+d,px+l:px+r]
                     self.uc_centers_matrix[i,j,:]=np.array([px+(r+l)/2,py+(u+d)/2])
+                    self._uc_slicers[(i,j)]=np.s_[py+u:py+d,px+l:px+r]
                 except ValueError:
                     print(px,py)
         
@@ -711,11 +713,25 @@ class UnitCellImage(hs.signals.Signal2D):
 
     def save(self,*args,**kwargs):
         self.metadata.set_item("UCS",{})
+
+        if hasattr(self,"_uc_slicers"):
+            temp ={}
+            original_uc_slicers = self._uc_slicers
+            for k,v in self._uc_slicers.items():
+                temp[str(k)]=str(v)
+            self._uc_slicers=temp
+
+
         for k in self._save:
           if k in self.__dict__.keys():
             self.metadata.UCS[k]= self.__dict__[k]
 
+
         super().save(*args,**kwargs)
+
+        if hasattr(self,"_uc_slicers"):
+            self._uc_slicers=original_uc_slicers
+
 
         #del self.metadata.UCS
 
@@ -740,6 +756,14 @@ def load(fname):
 
     if "pos_data" in keys:
         uci.check_pos_data()
+
+    if "_uc_slicers" in keys:
+        fix ={}
+        for k,v in uci._uc_slicers:
+            fix[eval(k)]=eval(v)
+        uci._uc_slicers=fix
+
+
 
     return uci
 
