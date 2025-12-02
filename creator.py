@@ -59,29 +59,6 @@ class Uci_Creator:
         self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
         self.selector = PolygonSelector(plt.gca(),self.onselect,props={"color" : selector_color,"linewidth":3},useblit=True)
 
-    def add_positions(self,):
-        print("Positions will be updated when the figure \"Atom positions\" is closed.")
-        self._added_pos=[]
-        self._fig = plt.figure("Atom Positions")
-        self._fig.canvas.mpl_connect("close_event",self.onclose_add_positions)
-        plt.clf()
-        plt.imshow(self.s.data,cmap="gray")
-        self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-        self.position_adder = self._fig.canvas.mpl_connect('button_press_event', self.onclick_add_position)
-
-    def remove_positions(self,):
-        print("Positions will be updated when the figure \"Atom positions\" is closed.")
-        self._added_pos=list(self.positions)
-        self._fig = plt.figure("Atom Positions")
-        self._fig.canvas.mpl_connect("close_event",self.onclose_remove_positions)
-        plt.clf()
-        plt.imshow(self.s.data,cmap="gray")
-        self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-        self.position_remover= self._fig.canvas.mpl_connect('button_press_event', self.onclick_remove_position)
-        
-
-
-        
     def plot_zone_axes(self):
         
         plt.clf()
@@ -172,6 +149,28 @@ class Uci_Creator:
         self.positions = self.positions[self.selected]
         print("Positions updated.")
 
+
+
+     def add_positions(self,):
+        print("Positions will be updated when the figure \"Atom positions\" is closed.")
+        self._added_pos=[]
+        self._fig = plt.figure("Atom Positions")
+        self._fig.canvas.mpl_connect("close_event",self.onclose_add_positions)
+        plt.clf()
+        plt.imshow(self.s.data,cmap="gray")
+        self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
+        self.position_adder = self._fig.canvas.mpl_connect('button_press_event', self.onclick_add_position)
+
+    def remove_positions(self,):
+        print("Positions will be updated when the figure \"Atom positions\" is closed.")
+        self._added_pos=list(self.positions)
+        self._fig = plt.figure("Atom Positions")
+        self._fig.canvas.mpl_connect("close_event",self.onclose_remove_positions)
+        plt.clf()
+        plt.imshow(self.s.data,cmap="gray")
+        self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
+        self.position_remover= self._fig.canvas.mpl_connect('button_press_event', self.onclick_remove_position)
+
     def onclick_add_position(self,click):
         self.point = [click.xdata,click.ydata]
 
@@ -230,3 +229,32 @@ class Uci_Creator:
         else:
             print("No positions removed")
         
+class Add_Delete_Positions:
+    def __init__(self,image,initial_positions,markersize=1):
+        self.image = image
+        self.init_pos = initial_positions.copy()
+        self.final_pos = initial_positions.copy()
+        self.idx_pos_to_remove =[]
+        self.pos_to_add = []
+        self.markersize=markersize
+
+        self._fig = plt.figure("Add/Remove positions")
+        plt.clf()
+        plt.imshow(self.image,cmap="gray")
+        self.pos_plot = plt.plot(self.init_pos[0],self.init_pos[1],"ro",markersize=self.markersize)
+        self._fig.canvas.mpl_connect("close_event",self.onclose_AddDelete)
+        self.position_AddDelete= self._fig.canvas.mpl_connect('button_press_event', self.onclick_AddDelete)
+
+    def onclose_AddDelete(self)
+        for i in sorted(self.idx_pos_to_remove)[::-1]:
+            _=self.final_pos.pop(i)
+        self.final_pos = np.concatenate(self.final_pos,np.array(self.pos_to_add))
+
+    def onclick_AddDelete(self):
+        pass
+        #four cases : 
+        # 1 close to atom already there, that is initial but marked for removal
+        # 2 close to atom already there, that is initial and not marked for removal
+        # 3 close to atom already there that is newly added
+        # 4 close to nothin
+
