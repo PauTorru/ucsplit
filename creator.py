@@ -245,7 +245,7 @@ class Add_Delete_Positions:
 		self._fig.canvas.mpl_connect("close_event",self.onclose_AddDelete)
 		self.position_AddDelete= self._fig.canvas.mpl_connect('button_press_event', self.onclick_AddDelete)
 
-	def onclose_AddDelete(self)
+	def onclose_AddDelete(self):
 		for i in sorted(self.idx_pos_to_remove)[::-1]:
 			_=self.final_pos.pop(i)
 		self.final_pos = np.concatenate(self.final_pos,np.array(self.pos_to_add))
