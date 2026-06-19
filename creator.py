@@ -9,7 +9,7 @@ from matplotlib.path import Path
 
 
 class Uci_Creator:
-	def __init__(self,s,markersize=3):
+	def __init__(self,s,markersize=2):
 		self.s = s
 		self.markersize = markersize
 		self._threshold_addpoint=None
@@ -57,7 +57,7 @@ class Uci_Creator:
 		plt.clf()
 		plt.imshow(self.s.data,cmap="gray")
 		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-		self.selector = PolygonSelector(plt.gca(),self.onselect,props={"color" : selector_color,"linewidth":3},useblit=True)
+		self.selector = PolygonSelector(plt.gca(),self.onselect,props={"color" : selector_color,"linewidth":1},useblit=True)
 
 	def plot_zone_axes(self):
 		
@@ -91,24 +91,6 @@ class Uci_Creator:
 				break
 			else:
 				pass
-
-		return np.array(planes)
-
-
-	def _old_get_planes(self,id1):
-		
-		self.taken = np.zeros(self.positions.shape[0],dtype="bool")
-		dst = np.linalg.norm(self.positions,axis=1,ord=1)
-		i0 = dst.argmin()
-		self.taken[i0]=True
-
-		planes = []
-
-		while not self.taken.all():
-			#print(i0)
-			planes.append(self.create_plane(i0,id1))
-			dst[self.taken]=np.inf
-			i0 = dst.argmin()
 
 		return np.array(planes)
 
@@ -149,112 +131,89 @@ class Uci_Creator:
 		self.positions = self.positions[self.selected]
 		print("Positions updated.")
 
+	def click_to_add_remove_positions(self,proximity_tol=5):
+
+		self._adp = Add_Delete_Positions(
+			self.s.data,
+			self.positions,
+			self.markersize,
+			proximity_tol=proximity_tol,
+			onclose_callback = self._update_add_remove_positions
+			)
+
+	def _update_add_remove_positions(self,new_positions):
+		self.positions = new_positions
 
 
-	def add_positions(self,):
-		print("Positions will be updated when the figure \"Atom positions\" is closed.")
-		self._added_pos=[]
-		self._fig = plt.figure("Atom Positions")
-		self._fig.canvas.mpl_connect("close_event",self.onclose_add_positions)
-		plt.clf()
-		plt.imshow(self.s.data,cmap="gray")
-		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-		self.position_adder = self._fig.canvas.mpl_connect('button_press_event', self.onclick_add_position)
-
-	def remove_positions(self,):
-		print("Positions will be updated when the figure \"Atom positions\" is closed.")
-		self._added_pos=list(self.positions)
-		self._fig = plt.figure("Atom Positions")
-		self._fig.canvas.mpl_connect("close_event",self.onclose_remove_positions)
-		plt.clf()
-		plt.imshow(self.s.data,cmap="gray")
-		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-		self.position_remover= self._fig.canvas.mpl_connect('button_press_event', self.onclick_remove_position)
-
-	def onclick_add_position(self,click):
-		self.point = [click.xdata,click.ydata]
-
-		if self._is_point_close_to_point_already_added():
-			self._remove_point()
-		else:
-			self._add_point()
-
-	def _is_point_close_to_point_already_added(self):
-		if len(self._added_pos)==0:
-			return False
-		p = np.array(self.point)
-		ps = np.array(self._added_pos)
-		norm = np.linalg.norm(ps-p,axis=1)
-		idx = norm.argmin()
-		if norm[idx]<=self._threshold_addpoint:
-			self._idx_point_to_remove=idx
-			return True
-		else:
-			return False
-
-
-	def _remove_point(self):
-		self._added_pos.pop(self._idx_point_to_remove)
-		line = self.pos_plot.pop(self._idx_point_to_remove+1)
-		line.remove()
-		plt.draw()
-
-	def _add_point(self):
-		self._added_pos.append(self.point)
-		self.pos_plot.extend(plt.plot(self.point[0],self.point[1],"go",markersize=self.markersize))
-		plt.draw()
-
-	def onclose_add_positions(self,event):
-		if len (self._added_pos)>0:
-			self.positions = np.concatenate([self.positions,np.array(self._added_pos)],axis=0)
-			print("Positions updated")
-		else:
-			print("No positions added")
-
-
-	def onclick_remove_position(self,click):
-		self.point = [click.xdata,click.ydata]
-
-		if self._is_point_close_to_point_already_added():
-			p = self._added_pos.pop(self._idx_point_to_remove)
-			self.pos_plot.extend(plt.plot(p[0],p[1],"bo",markersize=self.markersize))
-			plt.draw()
-		else:
-			pass
-
-	def onclose_remove_positions(self,event):
-		if len (self._added_pos)>0:
-			self.positions = np.array(self._added_pos)
-			print("Positions updated")
-		else:
-			print("No positions removed")
 		
 class Add_Delete_Positions:
-	def __init__(self,image,initial_positions,markersize=1):
+	def __init__(self,image,initial_positions,markersize=1,proximity_tol=5,onclose_callback=None):
 		self.image = image
-		self.init_pos = initial_positions.copy()
-		self.final_pos = initial_positions.copy()
-		self.idx_pos_to_remove =[]
-		self.pos_to_add = []
+		self.proximity_tol = proximity_tol
+		self._points_tracker = {i:(j,"keep") for i,j in enumerate(initial_positions)}
+		self._id_max = initial_positions.shape[0]
+		self._add_point_plot_tracker = {}
+		self._remove_point_plot_tracker = {}
+		self.final_positions = initial_positions.copy()
+		self.onclose_callback = onclose_callback
+
+
 		self.markersize=markersize
 
 		self._fig = plt.figure("Add/Remove positions")
+		print("Positions will be updated when the figure \"Add/Remove positions\" is closed.")
 		plt.clf()
 		plt.imshow(self.image,cmap="gray")
-		self.pos_plot = plt.plot(self.init_pos[0],self.init_pos[1],"ro",markersize=self.markersize)
+		self.pos_plot = plt.plot(initial_positions[:,0],initial_positions[:,1],"ro",markersize=self.markersize)
 		self._fig.canvas.mpl_connect("close_event",self.onclose_AddDelete)
-		self.position_AddDelete= self._fig.canvas.mpl_connect('button_press_event', self.onclick_AddDelete)
+		self._fig.canvas.mpl_connect('button_press_event', self.onclick_AddDelete)
 
-	def onclose_AddDelete(self):
-		for i in sorted(self.idx_pos_to_remove)[::-1]:
-			_=self.final_pos.pop(i)
-		self.final_pos = np.concatenate(self.final_pos,np.array(self.pos_to_add))
+	def onclose_AddDelete(self,event):
+		final_positions = []
+		for k,v in self._points_tracker.items():
+			p,status = v
+			if status == "keep" or status == "add":
+				final_positions.append(p)
 
-	def onclick_AddDelete(self):
-		pass
-		#four cases : 
-		# 1 close to atom already there, that is initial but marked for removal
-		# 2 close to atom already there, that is initial and not marked for removal
-		# 3 close to atom already there that is newly added
-		# 4 close to nothin
+		self.final_positions = np.array(final_positions)
+
+		if self.onclose_callback is not None:
+			self.onclose_callback(self.final_positions)
+		
+
+
+	def onclick_AddDelete(self,click):
+		self._point = np.array([click.xdata,click.ydata])
+
+		for k,v in self._points_tracker.items():
+			p,status = v
+			if np.hypot(*(self._point-p))<self.proximity_tol:
+				
+				if status =="keep":
+					self._points_tracker[k]=(p,"remove")
+					self._remove_point_plot_tracker[k] = plt.plot(p[0],p[1],"bo",markersize=self.markersize)
+
+				if status == "remove":
+					self._points_tracker[k]=(p,"keep")
+					self._remove_point_plot_tracker[k][0].remove()
+					
+				if status == "add":
+					self._points_tracker.pop(k)
+					self._add_point_plot_tracker[k][0].remove()
+				
+
+				self._fig.canvas.draw_idle()
+
+				return
+
+		#close to nothing
+		self._id_max+=1
+		self._points_tracker[self._id_max] = (self._point,"add")
+		self._add_point_plot_tracker[self._id_max] = plt.plot(self._point[0],self._point[1],"go",markersize=self.markersize)
+		self._fig.canvas.draw_idle()
+		return
+
+
+
+
 

@@ -768,8 +768,9 @@ def load(fname):
 
     if "_uc_slicers" in keys:
         fix ={}
-        for k,v in uci._uc_slicers:
-            fix[eval(k)]=eval(v)
+        for kk,v in uci._uc_slicers:
+            k = (int(kk.split("_")[1]),int(kk.split("_")[2]))
+            fix[k]=eval(v)
         uci._uc_slicers=fix
 
 
