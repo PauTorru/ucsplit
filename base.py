@@ -10,12 +10,12 @@ import matplotlib as mpl
 from matplotlib import cm
 import h5py
 import sklearn
-from creator import Add_Delete_Positions
+from .creator import Add_Delete_Positions
 import os
 import tempfile
 import zipfile
 import pickle
-from refine import RefinePositions
+from .refine import RefinePositions
 
 
 class UnitCellImage(hs.signals.Signal2D,RefinePositions):

@@ -25,8 +25,6 @@ class UciCreator:
 		plt.imshow(self.s.data,cmap="gray")
 		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
 
-		#uc.plot_pos_large(self.positions,self.s.data)
-
 	def plot(self):
 		plt.figure("Atom Positions")
 		plt.clf()
@@ -51,7 +49,6 @@ class UciCreator:
 		self.plot_zone_axes()
 
 	def select_positions(self,selector_color="limegreen"):
-		#uc.plot_pos_large(self.positions,self.s.data)
 		self._fig = plt.figure("Atom Positions")
 		self._fig.canvas.mpl_connect("close_event",self.onclose)
 		plt.clf()
@@ -118,7 +115,6 @@ class UciCreator:
 		verts.append(verts[0])
 		p = Path(verts)
 		self.selected = p.contains_points(self.positions)
-		#uc.plot_pos_large([self.positions[selected],self.positions[~selected]],self.s.data,colors=[[1,0,0],[0,1,0]])
 		for l in self.pos_plot:
 			l.remove()
 

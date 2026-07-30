@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import add_uci_scale_bar, add_scale_bar
+from .utils import add_uci_scale_bar, add_scale_bar
 
 def norm(x):
 	return (x-x.min())/(x.max()-x.min())
