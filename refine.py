@@ -106,51 +106,79 @@ def nb_eval_gaussians_2d(nx, ny, params, n_peaks):
 
 
 @njit(fastmath=True)
-def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_iter=30, tol=1e-4):
+def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_iter=200, tol=1e-4):
 	"""Levenberg-Marquardt solver for N overlapping Gaussians."""
 	ny, nx = cell_image.shape
 	M = ny * nx
 	num_params = 6 * n_peaks
 	p = init_params.copy()
+	p0_static = init_params.copy()
+	max_width = nx / 2.0
 	lam = 0.01
 	
-	J = np.zeros((M, num_params))
+	J_base = np.empty((num_params, M))
+	J = J_base.T
+	cell_flat = cell_image.ravel()
+	sqrt_weights = np.sqrt(np.maximum(cell_flat + 1e-3, 1e-8))
 	
 	for _ in range(max_iter):
 		# 1. Evaluate current model
 		f = nb_eval_gaussians_2d(nx, ny, p, n_peaks)
 		residual = cell_image.ravel() - f.ravel()
-		
-		# 2. Build Analytical Jacobian
-		idx_m = 0
-		for y in range(ny):
-			for x in range(nx):
-				w_pixel = cell_image[y, x] + 1e-3
+		weighted_residual = sqrt_weights * residual
 
-				for i in range(n_peaks):
-					idx = i * 6
-					x0, y0, A, sx, sy, theta = p[idx:idx+6]
-					
+		# 2. Build Analytical Jacobian
+
+		for i in range(n_peaks):
+			idx = i * 6
+			x0, y0, A, sx, sy, theta = p[idx:idx+6]
+			
+			sx = max(sx, 1e-4)
+			sy = max(sy, 1e-4)
+			
+			cos_t = np.cos(theta)
+			sin_t = np.sin(theta)
+			
+			inv_sx2 = 1.0 / (sx * sx)
+			inv_sy2 = 1.0 / (sy * sy)
+			inv_sx3 = inv_sx2 / sx
+			inv_sy3 = inv_sy2 / sy
+			idx_m = 0
+			for y in range(ny):
+				dy = y - y0
+				dy_sin = dy * sin_t
+				dy_cos = dy * cos_t
+				for x in range(nx):
 					dx = x - x0
-					dy = y - y0
-					cos_t, sin_t = np.cos(theta), np.sin(theta)
-					x_rot = dx * cos_t + dy * sin_t
-					y_rot = -dx * sin_t + dy * cos_t
 					
-					exp_val = -0.5 * ((x_rot / sx)**2 + (y_rot / sy)**2)
-					if exp_val < -700.0: exp_val = -700.0
-					Z_comp = A * np.exp(exp_val)
+					x_rot = dx * cos_t + dy_sin
+					y_rot = -dx * sin_t + dy_cos
+					exp_val = -0.5 * ((x_rot * x_rot) * inv_sx2 + (y_rot * y_rot) * inv_sy2)
+					if exp_val < -700.0: 
+						exp_val = -700.0
+
+					exp_res = np.exp(exp_val)
+					Z_comp = A * exp_res
 					
-					d_ex = x_rot / (sx**2)
-					d_ey = y_rot / (sy**2)
+					d_ex = x_rot * inv_sx2
+					d_ey = y_rot * inv_sy2
+
+					dz_dx0 = Z_comp * (d_ex * cos_t - d_ey * sin_t)
+					dz_dy0 = Z_comp * (d_ex * sin_t + d_ey * cos_t)
+					dz_dA  = exp_res
+					dz_dsx = Z_comp * (x_rot * x_rot) * inv_sx3
+					dz_dsy = Z_comp * (y_rot * y_rot) * inv_sy3
+					dz_dt  = Z_comp * (d_ex * (-y_rot) + d_ey * x_rot)
+					sw = sqrt_weights[idx_m]
 					
-					J[idx_m, idx]   = w_pixel * Z_comp * (d_ex * cos_t - d_ey * sin_t)	#dx0
-					J[idx_m, idx+1] = w_pixel * Z_comp * (d_ex * sin_t + d_ey * cos_t)	#dy0
-					J[idx_m, idx+2] = w_pixel * Z_comp / A if A != 0 else 0			#dA
-					J[idx_m, idx+3] = w_pixel * Z_comp * (x_rot**2) / (sx**3)			#dsx
-					J[idx_m, idx+4] = w_pixel * Z_comp * (y_rot**2) / (sy**3)			#dsy
-					J[idx_m, idx+5] = w_pixel * Z_comp * (d_ex * (-y_rot) + d_ey * x_rot)#dtheta
-				idx_m += 1
+					J[idx_m, idx]   = sw * dz_dx0
+					J[idx_m, idx+1] = sw * dz_dy0
+					J[idx_m, idx+2] = sw * dz_dA
+					J[idx_m, idx+3] = sw * dz_dsx
+					J[idx_m, idx+4] = sw * dz_dsy
+					J[idx_m, idx+5] = sw * dz_dt
+					
+					idx_m += 1
 				
 		# 3. LM Step Calculation
 		JT = J.T
@@ -158,7 +186,7 @@ def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_
 		gradient = np.dot(JT, residual)
 		
 		for i in range(num_params):
-			H[i, i] += (1.0 + lam) * H[i, i] + 1e-10
+			H[i, i] += lam * H[i, i] + 1e-10
 			
 		try:
 			step = np.linalg.solve(H, gradient)
@@ -166,34 +194,21 @@ def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_
 			break
 			
 		p += step
-		
-		p0_static = init_params.copy()
-		max_width = nx / 2.0  # Prevent a single atom from engulfing the cell
 
-		# ... (Inside the LM iteration loop, step 4) ...
 		# 4. Enforce physical boundaries
 		for i in range(n_peaks):
 			idx = i * 6
 			
-			# Position bounds (Clamp to max_drift)
-			if p[idx] < p0_static[idx] - max_drift: p[idx] = p0_static[idx] - max_drift
-			if p[idx] > p0_static[idx] + max_drift: p[idx] = p0_static[idx] + max_drift
+			p[idx]   = max(p0_static[idx] - max_drift, min(p0_static[idx] + max_drift, p[idx]))
+			p[idx+1] = max(p0_static[idx+1] - max_drift, min(p0_static[idx+1] + max_drift, p[idx+1]))
 			
-			if p[idx+1] < p0_static[idx+1] - max_drift: p[idx+1] = p0_static[idx+1] - max_drift
-			if p[idx+1] > p0_static[idx+1] + max_drift: p[idx+1] = p0_static[idx+1] + max_drift
-			
-			# Amplitude and Width bounds
-			if p[idx+2] < 0: p[idx+2] = 0.0		  # Amp >= 0
-			if p[idx+3] < 0.1: p[idx+3] = 0.1		# sx >= 0.1
-			if p[idx+4] < 0.1: p[idx+4] = 0.1		# sy >= 0.1
-			
-			if p[idx+3] > max_width: p[idx+3] = max_width
-			if p[idx+4] > max_width: p[idx+4] = max_width
-
+			p[idx+2] = max(0.0, p[idx+2])
+			p[idx+3] = max(0.1, min(max_width, p[idx+3]))
+			p[idx+4] = max(0.1, min(max_width, p[idx+4]))
 
 		if np.max(np.abs(step)) < tol:
 			break
-			
+
 	return p
 
 @njit(parallel=True, fastmath=True, nogil=True)
