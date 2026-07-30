@@ -1,303 +1,378 @@
-
 import numpy as np
-
-class UC_Model_full_fixed_atoms:
-    def _init_(self,shape,n_peaks,fixed,fixed_params):
-
-        if sorted(fixed)!=fixed or not isinstance(fixed,list):
-            raise TypeError("Sorted list required")
-
-        self.shape = shape
-        self.n_peaks = n_peaks
-        self.fixed=fixed
-        self.fixed_params=fixed_params
-
-    def model(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,5))
-        for i,pi in zip(self.fixed,self.fixed_params):
-            p = np.insert(p, i, pi, axis=0)
-
-        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
-    
-    def g(self, x,y,A,x0,y0,ssx,ssy):
-        
-        sy,sx = self.shape
-        return A*np.exp(-((x/sx-x0)**2)/ssx**2-((y/sy-y0)**2)/ssy**2)
-
-    def dg(self,x,y,A,x0,y0,ssx,ssy):
-
-        sy,sx = self.shape
-
-
-        ex = -((x/sx-x0)**2)/ssx**2
-        ey = -((y/sy-y0)**2)/ssy**2
-        ee =np.exp(ex+ey)
-        T = A*ee
-        dA = ee
-
-        dx0 = T*2*(x/sx-x0)/(ssx**2)
-        dy0 = T*2*(y/sy-y0)/(ssy**2)
-        dsx = -2*ex*T/(ssx**3)
-        dsy = -2*ex*T/(ssx**3)
-        return [dA,dx0,dy0,dsx,dsy]
-
-
-    def jacobian(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,5))
-        for i,pi in zip(self.fixed,self.fixed_params):
-            p = np.insert(p, i, pi, axis=0)
-
-        jac = np.array([self.dg(x,y,*pl) for pl in p])
-        return jac.reshape([-1,jac.shape[-1]]).T
-
-
-
-
-
-
-class UC_Model:
-    def __init__(self,shape,n_peaks):
-        self.shape = shape
-        self.n_peaks = n_peaks
-        
-    def model(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,4))
-
-        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
-    
-    def g(self, x,y,A,x0,y0,s):
-        
-        sy,sx = self.shape
-        return A*np.exp(-((x/sx-x0)**2+(y/sy-y0)**2)/s**2)
-
-    def dg(self, x,y,A,x0,y0,s):
-
-        sy,sx = self.shape
-
-
-        e =-((x/sx-x0)**2+(y/sy-y0)**2)
-        ee =np.exp(e/s**2)
-        T = A*ee
-        dA = ee
-        dx0 = T*2*(x/sx-x0)/(s**2)
-        dy0 = T*2*(y/sy-y0)/(s**2)
-        ds = -2*e*T/(s**3)
-        return [dA,dx0,dy0,ds]
-
-
-    def jacobian(self,X,*params):
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,4))
-        jac = np.array([self.dg(x,y,*pl) for pl in p])
-        return jac.reshape([-1,jac.shape[-1]]).T
-
-
-class UC_Model_fix_sigma:
-    def __init__(self,shape,n_peaks,sigmas):
-        self.shape = shape
-        self.n_peaks = n_peaks
-        self.sigmas = sigmas
-        
-    def model(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,3))
-        p = np.hstack([p,self.sigmas[:,np.newaxis]])
-
-
-        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
-    
-    def g(self, x,y,A,x0,y0,s):
-        
-        sy,sx = self.shape
-        return A*np.exp(-((x/sx-x0)**2+(y/sy-y0)**2)/s**2)
-
-
-    def dg(self, x,y,A,x0,y0,s):
-
-        sy,sx = self.shape
-
-
-        e =-((x/sx-x0)**2+(y/sy-y0)**2)
-        ee =np.exp(e/s**2)
-        T = A*ee
-        dA = ee
-        dx0 = T*2*(x/sx-x0)/(s**2)
-        dy0 = T*2*(y/sy-y0)/(s**2)
-        return [dA,dx0,dy0]
-
-
-    def jacobian(self,X,*params):
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,3))
-        p = np.hstack([p,self.sigmas[:,np.newaxis]])
-
-        jac = np.array([self.dg(x,y,*pl) for pl in p])
-        return jac.reshape([-1,jac.shape[-1]]).T
-
-
-class UC_Model_sxy:
-    def __init__(self,shape,n_peaks):
-        self.shape = shape
-        self.n_peaks = n_peaks
-        
-    def model(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,5))
-
-        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
-    
-    def g(self, x,y,A,x0,y0,ssx,ssy):
-        
-        sy,sx = self.shape
-        return A*np.exp(-((x/sx-x0)**2)/ssx**2-((y/sy-y0)**2)/ssy**2)
-
-    def dg(self,x,y,A,x0,y0,ssx,ssy):
-
-        sy,sx = self.shape
-
-
-        ex = -((x/sx-x0)**2)/ssx**2
-        ey = -((y/sy-y0)**2)/ssy**2
-        ee =np.exp(ex+ey)
-        T = A*ee
-        dA = ee
-
-        dx0 = T*2*(x/sx-x0)/(ssx**2)
-        dy0 = T*2*(y/sy-y0)/(ssy**2)
-        dsx = -2*ex*T/ssx
-        dsy = -2*ey*T/ssy
-        return [dA,dx0,dy0,dsx,dsy]
-
-
-    def jacobian(self,X,*params):
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,5))
-        jac = np.array([self.dg(x,y,*pl) for pl in p])
-        return jac.reshape([-1,jac.shape[-1]]).T
-
-
-class UC_Model_rotation:
-    def __init__(self,shape,n_peaks):
-        self.shape = shape
-        self.n_peaks = n_peaks
-        
-    def model(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,6))
-
-        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
-    
-    def g(self, x,y,A,x0,y0,a,b,c):
-        
-        sy,sx = self.shape
-        return A*np.exp( -(((x/sx-x0)**2)/(a**2) +((y/sy-y0)**2)/(b**2) +(x/sx-x0)*(y/sy-y0)/c**2))
-
-    def dg(self,x,y,A,x0,y0,a,b,c):
-
-        sy,sx = self.shape
-
-        cx = x/sx-x0
-        ex = cx/a
-        ex2 = -ex**2
-
-        cy = (y/sy-y0)
-        ey = cy/b
-        ey2 = -ey**2
-
-        exy= -cx*cy/c**2
-
-        ee =np.exp(ex2+ey2+exy)
-
-        T = A*ee
-
-        dA = ee
-
-        dx0 = T*(2*cx/a**2+cy/c**2)
-
-        dy0 = T*(2*cy/b**2+cy/c**2)
-
-
-        da = -2*ex2*T/a
-        db = -2*ey2*T/b
-        dc = -2*exy*T/c
-
-        return [dA,dx0,dy0,da,db,dc]
-
-
-    def jacobian(self,X,*params):
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,6))
-        jac = np.array([self.dg(x,y,*pl) for pl in p])
-        return jac.reshape([-1,jac.shape[-1]]).T
-
-
-class UC_Model_rotation_background:
-    def __init__(self,shape,n_peaks):
-        self.shape = shape
-        self.n_peaks = n_peaks
-        
-    def model(self,X,*params):
-        
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,9))
-
-        return np.sum([self.g(x,y,*pl) for pl in p],axis=0)
-    
-    def g(self, x,y,A,x0,y0,a,b,c,pa,pb,pc):
-        
-        sy,sx = self.shape
-        background = x*pa+y*pb+pc
-        return A*np.exp( -(((x/sx-x0)**2)/(a**2) +((y/sy-y0)**2)/(b**2) +(x/sx-x0)*(y/sy-y0)/c**2))+background
-
-    def dg(self,x,y,A,x0,y0,a,b,c,pa,pb,pc):
-
-        sy,sx = self.shape
-
-        cx = x/sx-x0
-        ex = cx/a
-        ex2 = -ex**2
-
-        cy = (y/sy-y0)
-        ey = cy/b
-        ey2 = -ey**2
-
-        exy= -cx*cy/c**2
-
-        ee =np.exp(ex2+ey2+exy)
-
-        T = A*ee
-
-        dA = ee
-
-        dx0 = T*(2*cx/a**2+cy/c**2)
-
-        dy0 = T*(2*cy/b**2+cy/c**2)
-
-
-        da = -2*ex2*T/a
-        db = -2*ey2*T/b
-        dc = -2*exy*T/c
-
-        dpa=x
-        dpb=y
-        dpc=np.zeros((x.shape))
-
-
-        return [dA,dx0,dy0,da,db,dc,dpa,dpb,dpc]
-
-
-    def jacobian(self,X,*params):
-        x,y=X
-        p = np.array(params).reshape((self.n_peaks,9))
-        jac = np.array([self.dg(x,y,*pl) for pl in p])
-        return jac.reshape([-1,jac.shape[-1]]).T
-
+from numba import njit, prange
+from numba_progress import ProgressBar
+from skimage.morphology import disk
+from scipy.ndimage import white_tophat
+
+@njit(fastmath=True)
+def nb_refine_single_atom_com(px, py, image, radius, iters):
+	"""
+	Refines a single atom coordinate using local Center of Mass.
+	No mask allocation, natively compiled.
+	"""
+	ny, nx = image.shape
+	current_x = px
+	current_y = py
+
+	for _ in range(iters):
+		# Establish the bounding box
+		x_start = int(np.floor(current_x - radius))
+		x_end = int(np.ceil(current_x + radius)) + 1
+		y_start = int(np.floor(current_y - radius))
+		y_end = int(np.ceil(current_y + radius)) + 1
+
+		# Clip boundaries to keep them safely inside the image matrix
+		if x_start < 0: x_start = 0
+		if x_end > nx: x_end = nx
+		if y_start < 0: y_start = 0
+		if y_end > ny: y_end = ny
+
+		sum_intensity = 0.0
+		sum_x = 0.0
+		sum_y = 0.0
+		r2 = radius * radius
+
+		# Iterate through the local window, evaluating the disk mathematically
+		for y_idx in range(y_start, y_end):
+			dy = y_idx - current_y
+			for x_idx in range(x_start, x_end):
+				dx = x_idx - current_x
+				
+				# Check if the pixel falls inside the circle radius
+				if (dx * dx + dy * dy) <= r2:
+					intensity = image[y_idx, x_idx]
+					sum_intensity += intensity
+					sum_x += intensity * x_idx
+					sum_y += intensity * y_idx
+
+		# Update coordinates if we have a valid denominator
+		if sum_intensity > 0.0:
+			current_x = sum_x / sum_intensity
+			current_y = sum_y / sum_intensity
+		else:
+			break
+
+	return current_x, current_y
+
+@njit(parallel=True, fastmath=True)
+def nb_refine_all_cells_com(pos_data, ucs_data, radius, iters):
+	"""
+	Parallel loop executing COM corrections across every row, column, 
+	and atom index simultaneously across all CPU threads.
+	"""
+	n_rows, n_cols, n_atoms, _ = pos_data.shape
+	refined_pos = pos_data.copy()
+
+	# prange distributes these iterations across your CPU cores
+	for r in prange(n_rows):
+		for c in prange(n_cols):
+			cell_image = ucs_data[r, c, :, :]
+			img_min = np.min(cell_image)
+			img_max = np.max(cell_image)
+			norm_image = (cell_image - img_min) / (img_max - img_min)
+			
+			for a in range(n_atoms):
+				px = pos_data[r, c, a, 0]
+				py = pos_data[r, c, a, 1]
+				
+				rx, ry = nb_refine_single_atom_com(px, py, norm_image, radius, iters)
+				
+				refined_pos[r, c, a, 0] = rx
+				refined_pos[r, c, a, 1] = ry
+
+	return refined_pos
+
+
+@njit(fastmath=True)
+def nb_eval_gaussians_2d(nx, ny, params, n_peaks):
+	"""Evaluates N 2D Gaussians on a grid of size (ny, nx)."""
+	Z = np.zeros((ny, nx))
+	for i in range(n_peaks):
+		x0, y0, A, sx, sy, theta = params[i*6 : i*6+6]
+		cos_t = np.cos(theta)
+		sin_t = np.sin(theta)
+		
+		for y in range(ny):
+			dy = y - y0
+			for x in range(nx):
+				dx = x - x0
+				x_rot = dx * cos_t + dy * sin_t
+				y_rot = -dx * sin_t + dy * cos_t
+				
+				exp_val = -0.5 * ((x_rot / sx)**2 + (y_rot / sy)**2)
+				if exp_val < -700.0: exp_val = -700.0
+				Z[y, x] += A * np.exp(exp_val)
+	return Z
+
+
+@njit(fastmath=True)
+def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_iter=30, tol=1e-4):
+	"""Levenberg-Marquardt solver for N overlapping Gaussians."""
+	ny, nx = cell_image.shape
+	M = ny * nx
+	num_params = 6 * n_peaks
+	p = init_params.copy()
+	lam = 0.01
+	
+	J = np.zeros((M, num_params))
+	
+	for _ in range(max_iter):
+		# 1. Evaluate current model
+		f = nb_eval_gaussians_2d(nx, ny, p, n_peaks)
+		residual = cell_image.ravel() - f.ravel()
+		
+		# 2. Build Analytical Jacobian
+		idx_m = 0
+		for y in range(ny):
+			for x in range(nx):
+				w_pixel = cell_image[y, x] + 1e-3
+
+				for i in range(n_peaks):
+					idx = i * 6
+					x0, y0, A, sx, sy, theta = p[idx:idx+6]
+					
+					dx = x - x0
+					dy = y - y0
+					cos_t, sin_t = np.cos(theta), np.sin(theta)
+					x_rot = dx * cos_t + dy * sin_t
+					y_rot = -dx * sin_t + dy * cos_t
+					
+					exp_val = -0.5 * ((x_rot / sx)**2 + (y_rot / sy)**2)
+					if exp_val < -700.0: exp_val = -700.0
+					Z_comp = A * np.exp(exp_val)
+					
+					d_ex = x_rot / (sx**2)
+					d_ey = y_rot / (sy**2)
+					
+					J[idx_m, idx]   = w_pixel * Z_comp * (d_ex * cos_t - d_ey * sin_t)	#dx0
+					J[idx_m, idx+1] = w_pixel * Z_comp * (d_ex * sin_t + d_ey * cos_t)	#dy0
+					J[idx_m, idx+2] = w_pixel * Z_comp / A if A != 0 else 0			#dA
+					J[idx_m, idx+3] = w_pixel * Z_comp * (x_rot**2) / (sx**3)			#dsx
+					J[idx_m, idx+4] = w_pixel * Z_comp * (y_rot**2) / (sy**3)			#dsy
+					J[idx_m, idx+5] = w_pixel * Z_comp * (d_ex * (-y_rot) + d_ey * x_rot)#dtheta
+				idx_m += 1
+				
+		# 3. LM Step Calculation
+		JT = J.T
+		H = np.dot(JT, J)
+		gradient = np.dot(JT, residual)
+		
+		for i in range(num_params):
+			H[i, i] += (1.0 + lam) * H[i, i] + 1e-10
+			
+		try:
+			step = np.linalg.solve(H, gradient)
+		except:
+			break
+			
+		p += step
+		
+		p0_static = init_params.copy()
+		max_width = nx / 2.0  # Prevent a single atom from engulfing the cell
+
+		# ... (Inside the LM iteration loop, step 4) ...
+		# 4. Enforce physical boundaries
+		for i in range(n_peaks):
+			idx = i * 6
+			
+			# Position bounds (Clamp to max_drift)
+			if p[idx] < p0_static[idx] - max_drift: p[idx] = p0_static[idx] - max_drift
+			if p[idx] > p0_static[idx] + max_drift: p[idx] = p0_static[idx] + max_drift
+			
+			if p[idx+1] < p0_static[idx+1] - max_drift: p[idx+1] = p0_static[idx+1] - max_drift
+			if p[idx+1] > p0_static[idx+1] + max_drift: p[idx+1] = p0_static[idx+1] + max_drift
+			
+			# Amplitude and Width bounds
+			if p[idx+2] < 0: p[idx+2] = 0.0		  # Amp >= 0
+			if p[idx+3] < 0.1: p[idx+3] = 0.1		# sx >= 0.1
+			if p[idx+4] < 0.1: p[idx+4] = 0.1		# sy >= 0.1
+			
+			if p[idx+3] > max_width: p[idx+3] = max_width
+			if p[idx+4] > max_width: p[idx+4] = max_width
+
+
+		if np.max(np.abs(step)) < tol:
+			break
+			
+	return p
+
+@njit(parallel=True, fastmath=True, nogil=True)
+def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_hook, max_drift):
+	"""Parallel wrapper to initialize and fit every unit cell."""
+	n_rows, n_cols, n_atoms, _ = pos_data.shape
+	ny, nx = preprocessed_ucs.shape[2], preprocessed_ucs.shape[3]
+	num_params = 6 * n_atoms
+	
+	# Store results
+	fitted_params = np.zeros((n_rows, n_cols, n_atoms, 6))
+	
+	# Base initialization logic for widths based on fraction 'f'
+	avg_dim = (nx + ny) / 2.0
+	sx_init = (f + 0.01) * avg_dim
+	sy_init = (f - 0.01) * avg_dim
+
+	for r in prange(n_rows):
+		for c in range(n_cols):
+			cell_image = preprocessed_ucs[r, c, :, :]
+			p0 = np.zeros(num_params)
+			
+			# Build initial guesses array
+			for a in range(n_atoms):
+				px = pos_data[r, c, a, 0]
+				py = pos_data[r, c, a, 1]
+				
+				# Estimate initial amplitude
+				xi, yi = int(np.round(px)), int(np.round(py))
+				if xi < 0: xi = 0
+				if xi >= nx: xi = nx - 1
+				if yi < 0: yi = 0
+				if yi >= ny: yi = ny - 1
+				A_init = cell_image[yi, xi]
+				
+				idx = a * 6
+				p0[idx]   = px
+				p0[idx+1] = py
+				p0[idx+2] = A_init
+				p0[idx+3] = sx_init
+				p0[idx+4] = sy_init
+				p0[idx+5] = 0.0  # Rotation init
+				
+			# Run JIT Optimization
+			p_fit = nb_fit_single_cell_2dgauss(cell_image, p0, n_atoms, max_drift, max_iter=iters,tol=tol)
+			
+			# Map flat parameter array back to structured output
+			for a in range(n_atoms):
+				for param_idx in range(6):
+					fitted_params[r, c, a, param_idx] = p_fit[a*6 + param_idx]
+			progress_hook.update(1)
+					
+	return fitted_params
+
+
+class RefinePositions:
+
+	def refine_atom_poisitions_com(self,iters=5,radius=5):
+		self.check_pos_data()
+		pos_matrix = self.pos_data.astype(np.float64) 
+		ucs_matrix = self.data
+		print("Executing multi-core Numba Center-of-Mass position refinement...")
+		refined_positions = nb_refine_all_cells_com(
+			pos_matrix, 
+			ucs_matrix, 
+			float(radius), 
+			int(iters)
+		)
+		self.pos_data = refined_positions
+		print("COM refinement completed successfully.")
+		self.uc_add_markers()
+
+	def default_preprocessing(self, ucs_matrix):
+		"""
+		Subtracts the minimum of each unit cell to create a zero-baseline image.
+		Returns the processed data and the tracked baseline state.
+		"""
+		# Calculate minimums over the spatial axes (ny, nx)
+		baselines = np.min(ucs_matrix, axis=(2, 3), keepdims=True)
+		processed_data = ucs_matrix - baselines
+		
+		# Squeeze baselines for easier storage: (n_rows, n_cols)
+		self._default_baselines = baselines.squeeze()
+		return processed_data
+
+	def inverse_default_preprocessing(self, modeled_ucs):
+		"""
+		Re-adds the stored baseline states to the mathematically evaluated pure Gaussians.
+		"""
+		# Expand baselines back to (n_rows, n_cols, 1, 1) for broadcasting
+		return modeled_ucs + self._default_baselines[:, :, np.newaxis, np.newaxis]
+
+	def preprocess_tophat(self, ucs_matrix, radius=5, **kwargs):
+		"""
+		Applies a 2D Top-Hat filter to every unit cell.
+		Isolates peaks by subtracting a structural rolling-ball background.
+		"""
+		
+		# Track the extracted background so the inverse function can restore it
+		# White Top-Hat = Original - Opened Image -> Background = Original - White Top-Hat
+		processed_data = np.zeros_like(ucs_matrix)
+		n_rows, n_cols = ucs_matrix.shape[0], ucs_matrix.shape[1]
+		
+		# Define a circular footprint based on the provided radius parameter
+		y, x = np.ogrid[-radius:radius+1, -radius:radius+1]
+		footprint = x**2 + y**2 <= radius**2
+		
+		for r in range(n_rows):
+			for c in range(n_cols):
+				processed_data[r, c] = white_tophat(ucs_matrix[r, c], footprint=footprint)
+				
+		# Structural background array is what was eliminated by the filter
+		self._tophat_backgrounds = ucs_matrix - processed_data
+		return processed_data
+
+	def inverse_preprocess_tophat(self, modeled_ucs):
+		"""
+		Re-adds the complex 2D structural background back to the modeled Gaussians.
+		"""
+		return modeled_ucs + self._tophat_backgrounds
+
+	def refine_uc_atoms_2dgauss(self, col_width_ratio=0.2, iters=30,tol=1e-4,preprocessing="default", max_drift = 10, **kwargs):
+		self.check_pos_data()
+		
+		pos_matrix = self.pos_data.astype(np.float64)
+		ucs_matrix = self.data
+		preprocessing_fs = {
+			"default": self.default_preprocessing,
+			"tophat": self.preprocess_tophat
+		}
+		if preprocessing not in preprocessing_fs:
+			raise ValueError(f"Unknown preprocessing type '{preprocessing}'")
+
+		self._preprocessing_type = preprocessing
+		
+		preprocessed_data = preprocessing_fs[self._preprocessing_type](
+			ucs_matrix, **kwargs
+		)
+
+		total_cells = pos_matrix.shape[0] * pos_matrix.shape[1]
+		with ProgressBar(total=total_cells) as numba_progress_bar:
+			self.gaussian_params = nb_fit_all_cells_2dgauss(
+				pos_matrix, 
+				preprocessed_data, 
+				float(col_width_ratio), 
+				int(iters),
+				tol,
+				numba_progress_bar,
+				max_drift
+			)
+		self.pos_data[:, :, :, 0] = self.gaussian_params[:, :, :, 0]
+		self.pos_data[:, :, :, 1] = self.gaussian_params[:, :, :, 1]
+		self.uc_add_markers()
+
+	def eval_uc_model(self):
+		"""
+		Evaluates the fitted parameters back into image arrays, 
+		and reconstructs them through the inverse preprocessing pipeline.
+		"""
+		if not hasattr(self, 'gaussian_params'):
+			raise ValueError("Must run refine_uc_atoms_2dgauss() before evaluating.")
+			
+		n_rows, n_cols, n_atoms, _ = self.gaussian_params.shape
+		ny, nx = self.data.shape[2], self.data.shape[3]
+		
+		modeled_data = np.zeros((n_rows, n_cols, ny, nx))
+		
+		# Generate pure models (we don't need JIT here as eval is relatively fast, 
+		# but we reuse the JIT math function for efficiency)
+		for r in range(n_rows):
+			for c in range(n_cols):
+				# Flatten params from (n_atoms, 6) to a 1D array of length n_atoms*6
+				flat_params = self.gaussian_params[r, c].ravel()
+				modeled_data[r, c] = nb_eval_gaussians_2d(nx, ny, flat_params, n_atoms)
+				
+		inverse_fs = {
+			"default": self.inverse_default_preprocessing,
+			"tophat": self.inverse_preprocess_tophat
+		}
+		reconstructed_data = inverse_fs[self._preprocessing_type](modeled_data)
+
+		return reconstructed_data

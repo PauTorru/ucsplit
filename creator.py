@@ -8,7 +8,7 @@ from matplotlib.widgets import PolygonSelector
 from matplotlib.path import Path
 
 
-class Uci_Creator:
+class UciCreator:
 	def __init__(self,s,markersize=2):
 		self.s = s
 		self.markersize = markersize
@@ -164,7 +164,8 @@ class Add_Delete_Positions:
 		print("Positions will be updated when the figure \"Add/Remove positions\" is closed.")
 		plt.clf()
 		plt.imshow(self.image,cmap="gray")
-		self.pos_plot = plt.plot(initial_positions[:,0],initial_positions[:,1],"ro",markersize=self.markersize)
+		if initial_positions.shape[0]>0:
+			self.pos_plot = plt.plot(initial_positions[:,0],initial_positions[:,1],"ro",markersize=self.markersize)
 		self._fig.canvas.mpl_connect("close_event",self.onclose_AddDelete)
 		self._fig.canvas.mpl_connect('button_press_event', self.onclick_AddDelete)
 
