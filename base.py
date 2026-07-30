@@ -315,7 +315,6 @@ class UnitCellImage(hs.signals.Signal2D):
         self.bounds = (boundx,boundy)
         #self.pos_data = None
         self.markers = None
-        self._fontsize=15
 
         self._save = ['uc_centers_matrix',
       'original_image', 'bounds','original_scale','_sigmas',
@@ -356,7 +355,7 @@ class UnitCellImage(hs.signals.Signal2D):
         self.markers = None
         self.pos_data_gui=am.add_atoms_with_gui(self.mean((0,1)),distance_threshold=1)
 
-    def plot_uc_atoms(self):
+    def plot_uc_atoms(self,fontsize=15):
         fig = plt.figure("Unit Cell Positions")
         plt.imshow(self.mean((0,1)))
         ax=plt.gca()
@@ -364,7 +363,7 @@ class UnitCellImage(hs.signals.Signal2D):
         ax.set_yticks([])
         for ii,p in self.pos_data_gui:
             plt.plot(p[0],p[1],"ro")
-            plt.text(p[0],p[1],str(ii),fontsize=self._fontsize)
+            plt.text(p[0],p[1],str(ii),fontsize=fontsize)
 
 
         # put them in eahc unit cell and set pos_data atribute
