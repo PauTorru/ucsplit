@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from .utils import add_uci_scale_bar, add_scale_bar
+import matplotlib.font_manager as fm
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from skimage.measure import block_reduce
 
 def norm(x):
 	return (x-x.min())/(x.max()-x.min())
@@ -155,15 +158,16 @@ def plot_polarization(
 
 	Downsamples both coordinates and polarization vectors via spatial block-averaging.
 	"""
+	plt.clf()
 	if ax is None:
 		ax = plt.gca()
 
 	ax.imshow(uci.original_image, cmap="gray")
 
 	if dxi is None:
-		dxi = uci.map_uc_property("polarization_dx")
+		dxi = uci.map_uc_property(polarization_dx)
 	if dyi is None:
-		dyi = uci.map_uc_property("polarization_dy")
+		dyi = uci.map_uc_property(polarization_dy)
 
 	pos = uci.uc_centers_matrix  # Shape: (Ny, Nx, 2)
 	cx = pos[:, :, 0]
