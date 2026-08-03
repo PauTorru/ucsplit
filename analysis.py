@@ -94,7 +94,10 @@ def plot_polarization_mod_angle(uci, pxi=None, pyi=None, **params):
 	pmi, pai = get_polarization_mod_angle(uci, pxi, pyi)
 
 	# Side-by-side subplots with modern layout management
-	fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), layout='constrained')
+	fig = plt.gcf()
+	plt.clf()
+	ax1 = plt.subplot(121)
+	ax2 = plt.subplot(122)
 
 	# --- Angle Plot ---
 	im1 = ax1.imshow(pai, vmin=0, vmax=360, cmap='twilight')
@@ -223,6 +226,7 @@ def plot_over_image(
 	interp_method="linear",
 	ax=None,
 	cbar=True,
+	use_t_as_alpha = False,
 ):
 	"""Overlays a unit-cell property map seamlessly on top of a background image.
 
@@ -246,13 +250,18 @@ def plot_over_image(
 		Target plot axis. Uses current axis if None.
 	cbar : bool, optional
 		Whether to draw a colorbar.
+	use_t_as_alpha: bool
+		Whether to use t itself to control transparency. it is still multiplied by the alpha parameter.
 
 	Returns
 	-------
 	cb : Colorbar or None
 	"""
+	plt.clf()
 	if ax is None:
 		ax = plt.gca()
+
+
 
 	# Extract coordinates and flatten property values
 	x = uci.uc_centers_matrix[..., 0].ravel()
@@ -265,7 +274,7 @@ def plot_over_image(
 
 	# Raster interpolation: interpolates scattered UC data into a 2D dense matrix
 	t_interp = griddata(
-        (x, y), z, (grid_x, grid_y), method=interp_method, fill_value=np.nan
+        (x, y), z, (grid_x, grid_y), method=interp_method, fill_value=0.
 	)
 
 	if vmin is None:
@@ -276,7 +285,11 @@ def plot_over_image(
 	# 1. Base image (grayscale background)
 	ax.imshow(im, cmap="gray", origin="upper")
 
+	if use_t_as_alpha:
+		alpha=norm(np.nan_to_num(t_interp,posinf=0,neginf=0))*alpha
+
 	# 2. Overlaid property map (single raster layer, extremely lightweight)
+
 	im_overlay = ax.imshow(
 		t_interp,
 		cmap=cmap,
@@ -285,6 +298,7 @@ def plot_over_image(
 		alpha=alpha,
 		origin="upper",
 		interpolation="bilinear",
+		interpolation_stage="data"
 	)
 
 	ax.set_xticks([])
