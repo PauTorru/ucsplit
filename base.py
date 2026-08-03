@@ -366,6 +366,8 @@ class UnitCellImage(hs.signals.Signal2D,RefinePositions):
 		ignored_attrs = ignored_attrs.union(ignored_attrs,{"roi","markers"})
 
 		attrs_to_save = {i:j for i,j in self.__dict__.items() if (i not in ignored_attrs) and not i.startswith("_")}
+		if hasattr(self,"_preprocessing_type"):
+			attrs_to_save["_processing_type"]=self._preprocessing_type
 
 		with tempfile.TemporaryDirectory() as tmpdir:
 			hspy_path = os.path.join(tmpdir, "signal.hspy")
