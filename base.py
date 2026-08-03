@@ -135,7 +135,7 @@ class UnitCellImage(hs.signals.Signal2D,RefinePositions):
 		ax=plt.gca()
 		ax.set_xticks([])
 		ax.set_yticks([])
-		for ii,p in self.pos_data_gui:
+		for ii,p in enumerate(self.pos_data_gui):
 			plt.plot(p[0],p[1],"ro")
 			plt.text(p[0],p[1],str(ii),fontsize=fontsize)
 
