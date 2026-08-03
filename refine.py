@@ -226,9 +226,13 @@ def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_
 	sx_init = (f + 0.01) * avg_dim
 	sy_init = (f - 0.01) * avg_dim
 
+	scale = 100.0
+
 	for r in prange(n_rows):
 		for c in range(n_cols):
-			cell_image = preprocessed_ucs[r, c, :, :]
+			img_max = np.max(preprocessed_ucs[r, c, :, :])
+			scale_factor = target_scale / (img_max + 1e-8)
+			cell_image = scale_factor*preprocessed_ucs[r, c, :, :]
 			p0 = np.zeros(num_params)
 			
 			# Build initial guesses array
@@ -257,8 +261,10 @@ def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_
 			
 			# Map flat parameter array back to structured output
 			for a in range(n_atoms):
+				idx = a * 6
 				for param_idx in range(6):
-					fitted_params[r, c, a, param_idx] = p_fit[a*6 + param_idx]
+					fitted_params[r, c, a, param_idx] = p_fit[idx + param_idx]
+				fitted_params[r, c, a, 2] = p_fit[idx + 2]/scale_factor
 			progress_hook.update(1)
 					
 	return fitted_params
