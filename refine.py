@@ -231,7 +231,7 @@ def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_
 	for r in prange(n_rows):
 		for c in range(n_cols):
 			img_max = np.max(preprocessed_ucs[r, c, :, :])
-			scale_factor = target_scale / (img_max + 1e-8)
+			scale_factor = scale / (img_max + 1e-8)
 			cell_image = scale_factor*preprocessed_ucs[r, c, :, :]
 			p0 = np.zeros(num_params)
 			
