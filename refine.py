@@ -69,7 +69,7 @@ def nb_refine_all_cells_com(pos_data, ucs_data, radius, iters):
 			cell_image = ucs_data[r, c, :, :]
 			img_min = np.min(cell_image)
 			img_max = np.max(cell_image)
-			norm_image = (cell_image - img_min) / (img_max - img_min)
+			norm_image = (cell_image - img_min) / (img_max - img_min + 1e-10)
 			
 			for a in range(n_atoms):
 				px = pos_data[r, c, a, 0]
@@ -106,7 +106,7 @@ def nb_eval_gaussians_2d(nx, ny, params, n_peaks):
 
 
 @njit(fastmath=True)
-def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_iter=200, tol=1e-4):
+def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, bounds, max_iter=200, tol=1e-4):
 	"""Levenberg-Marquardt solver for N overlapping Gaussians."""
 	ny, nx = cell_image.shape
 	M = ny * nx
@@ -120,6 +120,11 @@ def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_
 	J = J_base.T
 	cell_flat = cell_image.ravel()
 	sqrt_weights = np.sqrt(np.maximum(cell_flat + 1e-3, 1e-8))
+
+	A_min, A_max = bounds[0, 0], bounds[0, 1]
+	sx_min, sx_max = bounds[1, 0], bounds[1, 1]
+	sy_min, sy_max = bounds[2, 0], bounds[2, 1]
+	t_min, t_max = bounds[3, 0], bounds[3, 1]
 	
 	for _ in range(max_iter):
 		# 1. Evaluate current model
@@ -195,16 +200,18 @@ def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_
 			
 		p += step
 
-		# 4. Enforce physical boundaries
+		# 4. Enforce boundaries
 		for i in range(n_peaks):
 			idx = i * 6
-			
+			# Drift limits for x and y
 			p[idx]   = max(p0_static[idx] - max_drift, min(p0_static[idx] + max_drift, p[idx]))
 			p[idx+1] = max(p0_static[idx+1] - max_drift, min(p0_static[idx+1] + max_drift, p[idx+1]))
 			
-			p[idx+2] = max(0.0, p[idx+2])
-			p[idx+3] = max(0.1, min(max_width, p[idx+3]))
-			p[idx+4] = max(0.1, min(max_width, p[idx+4]))
+			# Imposed bounds for properties
+			p[idx+2] = max(A_min, min(A_max, p[idx+2]))
+			p[idx+3] = max(sx_min, min(sx_max, p[idx+3]))
+			p[idx+4] = max(sy_min, min(sy_max, p[idx+4]))
+			p[idx+5] = max(t_min, min(t_max, p[idx+5]))
 
 		if np.max(np.abs(step)) < tol:
 			break
@@ -212,7 +219,7 @@ def nb_fit_single_cell_2dgauss(cell_image, init_params, n_peaks, max_drift, max_
 	return p
 
 @njit(parallel=True, fastmath=True, nogil=True)
-def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_hook, max_drift):
+def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_hook, max_drift, global_bounds):
 	"""Parallel wrapper to initialize and fit every unit cell."""
 	n_rows, n_cols, n_atoms, _ = pos_data.shape
 	ny, nx = preprocessed_ucs.shape[2], preprocessed_ucs.shape[3]
@@ -234,6 +241,12 @@ def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_
 			scale_factor = scale / (img_max + 1e-8)
 			cell_image = scale_factor*preprocessed_ucs[r, c, :, :]
 			p0 = np.zeros(num_params)
+			local_bounds = np.empty((4, 2), dtype=np.float64)
+			local_bounds[0, 0] = global_bounds[0, 0] * scale_factor
+			local_bounds[0, 1] = global_bounds[0, 1] * scale_factor
+			local_bounds[1] = global_bounds[1]
+			local_bounds[2] = global_bounds[2]
+			local_bounds[3] = global_bounds[3]
 			
 			# Build initial guesses array
 			for a in range(n_atoms):
@@ -257,7 +270,7 @@ def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_
 				p0[idx+5] = 0.0  # Rotation init
 				
 			# Run JIT Optimization
-			p_fit = nb_fit_single_cell_2dgauss(cell_image, p0, n_atoms, max_drift, max_iter=iters,tol=tol)
+			p_fit = nb_fit_single_cell_2dgauss(cell_image, p0, n_atoms, max_drift, local_bounds, max_iter=iters,tol=tol)
 			
 			# Map flat parameter array back to structured output
 			for a in range(n_atoms):
@@ -272,7 +285,7 @@ def nb_fit_all_cells_2dgauss(pos_data, preprocessed_ucs, f, iters,tol, progress_
 
 class RefinePositions:
 
-	def refine_atom_poisitions_com(self,iters=5,radius=5):
+	def refine_atom_positions_com(self,iters=5,radius=5):
 		self.check_pos_data()
 		pos_matrix = self.pos_data.astype(np.float64) 
 		ucs_matrix = self.data
@@ -336,7 +349,7 @@ class RefinePositions:
 		"""
 		return modeled_ucs + self._tophat_backgrounds
 
-	def refine_uc_atoms_2dgauss(self, col_width_ratio=0.2, iters=30,tol=1e-4,preprocessing="default", max_drift = 10, **kwargs):
+	def refine_uc_atoms_2dgauss(self, col_width_ratio=0.2, iters=30,tol=1e-4,preprocessing="default", max_drift = 10, bounds=None,**kwargs):
 		self.check_pos_data()
 		
 		pos_matrix = self.pos_data.astype(np.float64)
@@ -354,6 +367,53 @@ class RefinePositions:
 			ucs_matrix, **kwargs
 		)
 
+		# ----------------------------------------------------
+		# Bounds Parsing and Packing
+		# ----------------------------------------------------
+		ny, nx = preprocessed_data.shape[2], preprocessed_data.shape[3]
+		max_width = nx / 2.0
+		
+		# Define defaults
+		b_dict = {
+			"A": (0.0, np.inf),
+			"sx": (0.1, max_width),
+			"sy": (0.1, max_width),
+			"theta": (-np.inf, np.inf)
+		}
+
+		# Alias mapping for convenience
+		alias_map = {"sigma_x": "sx", "sigma_y": "sy", "amplitude": "A", "angle": "theta"}
+		_bounds = {}
+		if bounds is not None:
+			_bounds = bounds.copy()
+
+		# 1. Convenience: map 'sigma' to both sx and sy
+		if "sigma" in _bounds:
+			_bounds["sx"] = _bounds["sigma"]
+			_bounds["sy"] = _bounds["sigma"]
+
+		# 2. Convenience: map 'drift' to max_drift
+		if "drift" in _bounds:
+			d_val = _bounds["drift"]
+			if isinstance(d_val, (list, tuple)):
+				# If user passes e.g. (-5, 5), take the max absolute value
+				max_drift = float(max(abs(d_val[0]), abs(d_val[1])))
+			else:
+				# If user passes a scalar e.g. 5
+				max_drift = float(d_val)
+
+		for k, v in _bounds.items():
+				key = alias_map.get(k, k)
+				if key in b_dict:
+					b_dict[key] = (float(v[0]), float(v[1]))
+
+		global_bounds = np.array([
+			b_dict["A"],
+			b_dict["sx"],
+			b_dict["sy"],
+			b_dict["theta"]
+		], dtype=np.float64)
+
 		total_cells = pos_matrix.shape[0] * pos_matrix.shape[1]
 		with ProgressBar(total=total_cells) as numba_progress_bar:
 			self.gaussian_params = nb_fit_all_cells_2dgauss(
@@ -363,7 +423,8 @@ class RefinePositions:
 				int(iters),
 				tol,
 				numba_progress_bar,
-				max_drift
+				float(max_drift),
+				global_bounds
 			)
 		self.pos_data[:, :, :, 0] = self.gaussian_params[:, :, :, 0]
 		self.pos_data[:, :, :, 1] = self.gaussian_params[:, :, :, 1]
