@@ -9,208 +9,242 @@ from matplotlib.path import Path
 
 
 class UciCreator:
-	def __init__(self,s,markersize=2):
-		self.s = s
-		self.markersize = markersize
-		self._threshold_addpoint=None
+    def __init__(self, s, markersize=2):
+        self.s = s
+        self.markersize = markersize
+        self._threshold_addpoint = None
 
-	def peak_locator(self,min_distance=10):
-		self.positions = peak_local_max(self.s.data, min_distance = min_distance)[:,::-1]
-		if self._threshold_addpoint is None:
-			self._threshold_addpoint=min_distance//2
+    def peak_locator(self, min_distance=10):
+        self.positions = peak_local_max(self.s.data, min_distance=min_distance)[:, ::-1]
+        if self._threshold_addpoint is None:
+            self._threshold_addpoint = min_distance // 2
 
-		self._threshold_addpoint=min_distance//2
-		plt.figure("Atom Positions")
-		plt.clf()
-		plt.imshow(self.s.data,cmap="gray")
-		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
+        self._threshold_addpoint = min_distance // 2
+        plt.figure("Atom Positions")
+        plt.clf()
+        plt.imshow(self.s.data, cmap="gray")
+        self.pos_plot = plt.plot(
+            self.positions[:, 0], self.positions[:, 1], "ro", markersize=self.markersize
+        )
 
-	def plot(self):
-		plt.figure("Atom Positions")
-		plt.clf()
-		plt.imshow(self.s.data,cmap="gray")
-		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
+    def plot(self):
+        plt.figure("Atom Positions")
+        plt.clf()
+        plt.imshow(self.s.data, cmap="gray")
+        self.pos_plot = plt.plot(
+            self.positions[:, 0], self.positions[:, 1], "ro", markersize=self.markersize
+        )
 
-	def construct_zone_axes(self,n_neighbors=9,**kwargs):
-		self.positions=np.array(self.positions)
-		
-		NN = sklearn.neighbors.NearestNeighbors(n_neighbors=n_neighbors)
-		neighs = NN.fit(self.positions)
-		self.d,self.idx = neighs.kneighbors(self.positions)
+    def construct_zone_axes(self, n_neighbors=9, **kwargs):
+        self.positions = np.array(self.positions)
 
-		self.relative_positions = self.positions[self.idx]
-		self.relative_positions-=self.relative_positions[:,0,:][:,np.newaxis,:]
-		self.relative_positions =self.relative_positions[:,1:,:]/np.linalg.norm(self.relative_positions[:,1:,:],axis=2).min()
-		self.idx = self.idx[:,1:]
-		self.db = DBSCAN(**kwargs).fit(self.relative_positions.reshape((-1,2)))
-		self.labels = self.db.labels_.reshape(self.relative_positions.shape[:-1])
-		self.centroids=np.array([self.relative_positions.reshape((-1,2))[self.db.labels_==i].mean(0) for i in range(self.db.labels_.max()+1)])
-		print("Clustering done.")
-		self.plot_zone_axes()
+        NN = sklearn.neighbors.NearestNeighbors(n_neighbors=n_neighbors)
+        neighs = NN.fit(self.positions)
+        self.d, self.idx = neighs.kneighbors(self.positions)
 
-	def select_positions(self,selector_color="limegreen"):
-		self._fig = plt.figure("Atom Positions")
-		self._fig.canvas.mpl_connect("close_event",self.onclose)
-		plt.clf()
-		plt.imshow(self.s.data,cmap="gray")
-		self.pos_plot = plt.plot(self.positions[:,0],self.positions[:,1],"ro",markersize=self.markersize)
-		self.selector = PolygonSelector(plt.gca(),self.onselect,props={"color" : selector_color,"linewidth":1},useblit=True)
+        self.relative_positions = self.positions[self.idx]
+        self.relative_positions -= self.relative_positions[:, 0, :][:, np.newaxis, :]
+        self.relative_positions = (
+            self.relative_positions[:, 1:, :]
+            / np.linalg.norm(self.relative_positions[:, 1:, :], axis=2).min()
+        )
+        self.idx = self.idx[:, 1:]
+        self.db = DBSCAN(**kwargs).fit(self.relative_positions.reshape((-1, 2)))
+        self.labels = self.db.labels_.reshape(self.relative_positions.shape[:-1])
+        self.centroids = np.array(
+            [
+                self.relative_positions.reshape((-1, 2))[self.db.labels_ == i].mean(0)
+                for i in range(self.db.labels_.max() + 1)
+            ]
+        )
+        print("Clustering done.")
+        self.plot_zone_axes()
 
-	def plot_zone_axes(self):
-		
-		plt.clf()
-	
-		for i in range(len(self.centroids)):
-			pts = self.relative_positions.reshape((-1,2))[self.db.labels_==i]
-			plt.plot(pts[:,0],-pts[:,1],"o")
-			plt.text(self.centroids[i][0],-self.centroids[i][1],str(i),fontsize=20)
+    def select_positions(self, selector_color="limegreen"):
+        self._fig = plt.figure("Atom Positions")
+        self._fig.canvas.mpl_connect("close_event", self.onclose)
+        plt.clf()
+        plt.imshow(self.s.data, cmap="gray")
+        self.pos_plot = plt.plot(
+            self.positions[:, 0], self.positions[:, 1], "ro", markersize=self.markersize
+        )
+        self.selector = PolygonSelector(
+            plt.gca(),
+            self.onselect,
+            props={"color": selector_color, "linewidth": 1},
+            useblit=True,
+        )
+
+    def plot_zone_axes(self):
+
+        plt.clf()
+
+        for i in range(len(self.centroids)):
+            pts = self.relative_positions.reshape((-1, 2))[self.db.labels_ == i]
+            plt.plot(pts[:, 0], -pts[:, 1], "o")
+            plt.text(self.centroids[i][0], -self.centroids[i][1], str(i), fontsize=20)
+
+    def get_planes(self, id1, id2, i0=None):
+
+        self.taken = np.zeros(self.positions.shape[0], dtype="bool")
+        dst = np.linalg.norm(self.positions, axis=1, ord=1)
+        if i0 is None:
+            i0 = dst.argmin()
+
+        self.taken[i0] = True
+
+        planes = []
+
+        while not self.taken.all():
+            # print(i0)
+            planes.append(self.create_plane(i0, id1))
+            if id2 in self.labels[i0]:
+                i0 = self.idx[i0][self.labels[i0] == id2][0]
+                self.taken[i0] = True
+            elif not self.taken.all():
+                print("Could not find neighbour along one of the directions")
+                break
+            else:
+                pass
+
+        return np.array(planes)
+
+    def create_plane(self, i0, za):
+        i = i0
+        self.taken[i0] = True
+        plane = [self.positions[i0]]
+        while za in self.labels[i]:
+            i = self.idx[i][self.labels[i] == za][0]
+            self.taken[i] = True
+            plane.append(self.positions[i])
+            # print(i)
+        return np.array(plane)
+
+    def plot_planes(self, planes):
+        plt.clf()
+        plt.imshow(self.s.data, cmap="gray")
+        for p in planes:
+            plt.plot(p[:, 0], p[:, 1])
+
+    def onselect(self, verts):
+        verts.append(verts[0])
+        p = Path(verts)
+        self.selected = p.contains_points(self.positions)
+        for l in self.pos_plot:
+            l.remove()
+
+        self.pos_plot = plt.plot(
+            self.positions[self.selected, 0],
+            self.positions[self.selected, 1],
+            "go",
+            markersize=self.markersize,
+        )
+        self.pos_plot.extend(
+            plt.plot(
+                self.positions[~self.selected, 0],
+                self.positions[~self.selected, 1],
+                "ro",
+                markersize=self.markersize,
+            )
+        )
+        plt.draw()
+        self.selector.clear()
+
+    def onclose(self, event):
+        self.positions = self.positions[self.selected]
+        print("Positions updated.")
+
+    def click_to_add_remove_positions(self, proximity_tol=5):
+
+        self._adp = Add_Delete_Positions(
+            self.s.data,
+            self.positions,
+            self.markersize,
+            proximity_tol=proximity_tol,
+            onclose_callback=self._update_add_remove_positions,
+        )
+
+    def _update_add_remove_positions(self, new_positions):
+        self.positions = new_positions
 
 
-	def get_planes(self,id1,id2,i0 = None):
-		
-		self.taken = np.zeros(self.positions.shape[0],dtype="bool")
-		dst = np.linalg.norm(self.positions,axis=1,ord=1)
-		if i0 is None:
-			i0 = dst.argmin()
-
-		self.taken[i0]=True
-
-		planes = []
-
-		while not self.taken.all():
-			#print(i0)
-			planes.append(self.create_plane(i0,id1))
-			if id2 in self.labels[i0]:
-				i0 = self.idx[i0][self.labels[i0]==id2][0]
-				self.taken[i0]=True
-			elif not self.taken.all():
-				print("Could not find neighbour along one of the directions")
-				break
-			else:
-				pass
-
-		return np.array(planes)
-
-
-	def create_plane(self,i0,za):
-		i=i0
-		self.taken[i0]=True
-		plane = [self.positions[i0]]
-		while za in self.labels[i]:
-			i = self.idx[i][self.labels[i]==za][0]
-			self.taken[i]=True
-			plane.append(self.positions[i])
-			#print(i)
-		return np.array(plane)
-
-	def plot_planes(self,planes):
-		plt.clf()
-		plt.imshow(self.s.data,cmap="gray")
-		for p in planes:
-			plt.plot(p[:,0],p[:,1])
-		
-
-
-	def onselect(self,verts):
-		verts.append(verts[0])
-		p = Path(verts)
-		self.selected = p.contains_points(self.positions)
-		for l in self.pos_plot:
-			l.remove()
-
-		self.pos_plot = plt.plot(self.positions[self.selected,0],self.positions[self.selected,1],"go",markersize=self.markersize)
-		self.pos_plot.extend(plt.plot(self.positions[~self.selected,0],self.positions[~self.selected,1],"ro",markersize=self.markersize))
-		plt.draw()
-		self.selector.clear()
-
-	def onclose(self,event):
-		self.positions = self.positions[self.selected]
-		print("Positions updated.")
-
-	def click_to_add_remove_positions(self,proximity_tol=5):
-
-		self._adp = Add_Delete_Positions(
-			self.s.data,
-			self.positions,
-			self.markersize,
-			proximity_tol=proximity_tol,
-			onclose_callback = self._update_add_remove_positions
-			)
-
-	def _update_add_remove_positions(self,new_positions):
-		self.positions = new_positions
-
-
-		
 class Add_Delete_Positions:
-	def __init__(self,image,initial_positions,markersize=1,proximity_tol=5,onclose_callback=None):
-		self.image = image
-		self.proximity_tol = proximity_tol
-		self._points_tracker = {i:(j,"keep") for i,j in enumerate(initial_positions)}
-		self._id_max = initial_positions.shape[0]
-		self._add_point_plot_tracker = {}
-		self._remove_point_plot_tracker = {}
-		self.final_positions = initial_positions.copy()
-		self.onclose_callback = onclose_callback
+    def __init__(
+        self,
+        image,
+        initial_positions,
+        markersize=1,
+        proximity_tol=5,
+        onclose_callback=None,
+    ):
+        self.image = image
+        self.proximity_tol = proximity_tol
+        self._points_tracker = {i: (j, "keep") for i, j in enumerate(initial_positions)}
+        self._id_max = initial_positions.shape[0]
+        self._add_point_plot_tracker = {}
+        self._remove_point_plot_tracker = {}
+        self.final_positions = initial_positions.copy()
+        self.onclose_callback = onclose_callback
 
+        self.markersize = markersize
 
-		self.markersize=markersize
+        self._fig = plt.figure("Add/Remove positions")
+        print(
+            'Positions will be updated when the figure "Add/Remove positions" is closed.'
+        )
+        plt.clf()
+        plt.imshow(self.image, cmap="gray")
+        if initial_positions.shape[0] > 0:
+            self.pos_plot = plt.plot(
+                initial_positions[:, 0],
+                initial_positions[:, 1],
+                "ro",
+                markersize=self.markersize,
+            )
+        self._fig.canvas.mpl_connect("close_event", self.onclose_AddDelete)
+        self._fig.canvas.mpl_connect("button_press_event", self.onclick_AddDelete)
 
-		self._fig = plt.figure("Add/Remove positions")
-		print("Positions will be updated when the figure \"Add/Remove positions\" is closed.")
-		plt.clf()
-		plt.imshow(self.image,cmap="gray")
-		if initial_positions.shape[0]>0:
-			self.pos_plot = plt.plot(initial_positions[:,0],initial_positions[:,1],"ro",markersize=self.markersize)
-		self._fig.canvas.mpl_connect("close_event",self.onclose_AddDelete)
-		self._fig.canvas.mpl_connect('button_press_event', self.onclick_AddDelete)
+    def onclose_AddDelete(self, event):
+        final_positions = []
+        for k, v in self._points_tracker.items():
+            p, status = v
+            if status == "keep" or status == "add":
+                final_positions.append(p)
 
-	def onclose_AddDelete(self,event):
-		final_positions = []
-		for k,v in self._points_tracker.items():
-			p,status = v
-			if status == "keep" or status == "add":
-				final_positions.append(p)
+        self.final_positions = np.array(final_positions)
 
-		self.final_positions = np.array(final_positions)
+        if self.onclose_callback is not None:
+            self.onclose_callback(self.final_positions)
 
-		if self.onclose_callback is not None:
-			self.onclose_callback(self.final_positions)
-		
+    def onclick_AddDelete(self, click):
+        self._point = np.array([click.xdata, click.ydata])
 
+        for k, v in self._points_tracker.items():
+            p, status = v
+            if np.hypot(*(self._point - p)) < self.proximity_tol:
+                if status == "keep":
+                    self._points_tracker[k] = (p, "remove")
+                    self._remove_point_plot_tracker[k] = plt.plot(
+                        p[0], p[1], "bo", markersize=self.markersize
+                    )
 
-	def onclick_AddDelete(self,click):
-		self._point = np.array([click.xdata,click.ydata])
+                if status == "remove":
+                    self._points_tracker[k] = (p, "keep")
+                    self._remove_point_plot_tracker[k][0].remove()
 
-		for k,v in self._points_tracker.items():
-			p,status = v
-			if np.hypot(*(self._point-p))<self.proximity_tol:
-				
-				if status =="keep":
-					self._points_tracker[k]=(p,"remove")
-					self._remove_point_plot_tracker[k] = plt.plot(p[0],p[1],"bo",markersize=self.markersize)
+                if status == "add":
+                    self._points_tracker.pop(k)
+                    self._add_point_plot_tracker[k][0].remove()
 
-				if status == "remove":
-					self._points_tracker[k]=(p,"keep")
-					self._remove_point_plot_tracker[k][0].remove()
-					
-				if status == "add":
-					self._points_tracker.pop(k)
-					self._add_point_plot_tracker[k][0].remove()
-				
+                self._fig.canvas.draw_idle()
 
-				self._fig.canvas.draw_idle()
+                return
 
-				return
-
-		#close to nothing
-		self._id_max+=1
-		self._points_tracker[self._id_max] = (self._point,"add")
-		self._add_point_plot_tracker[self._id_max] = plt.plot(self._point[0],self._point[1],"go",markersize=self.markersize)
-		self._fig.canvas.draw_idle()
-		return
-
-
-
-
-
+        # close to nothing
+        self._id_max += 1
+        self._points_tracker[self._id_max] = (self._point, "add")
+        self._add_point_plot_tracker[self._id_max] = plt.plot(
+            self._point[0], self._point[1], "go", markersize=self.markersize
+        )
+        self._fig.canvas.draw_idle()
+        return
