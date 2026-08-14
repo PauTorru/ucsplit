@@ -441,6 +441,7 @@ def load(filename):
 
 		for k, v in saved_state.items():
 			setattr(uci, k, v)
-		uci.uc_add_markers()
+		if hasattr(uci,"pos_data"):
+			uci.uc_add_markers()
 
 		return uci
